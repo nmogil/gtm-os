@@ -13,10 +13,15 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as actions from "../actions.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_encryption from "../lib/encryption.js";
+import type * as lib_env from "../lib/env.js";
 import type * as lib_errors from "../lib/errors.js";
 import type * as lib_httpAuth from "../lib/httpAuth.js";
+import type * as lib_resend from "../lib/resend.js";
+import type * as mutations from "../mutations.js";
 import type * as queries from "../queries.js";
 import type * as seed from "../seed.js";
 
@@ -29,10 +34,15 @@ import type * as seed from "../seed.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  actions: typeof actions;
   http: typeof http;
   "lib/auth": typeof lib_auth;
+  "lib/encryption": typeof lib_encryption;
+  "lib/env": typeof lib_env;
   "lib/errors": typeof lib_errors;
   "lib/httpAuth": typeof lib_httpAuth;
+  "lib/resend": typeof lib_resend;
+  mutations: typeof mutations;
   queries: typeof queries;
   seed: typeof seed;
 }>;
