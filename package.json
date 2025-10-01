@@ -1,0 +1,31 @@
+{
+  "name": "gtm-os",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "convex dev",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nmogil/gtm-os.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/nmogil/gtm-os/issues"
+  },
+  "homepage": "https://github.com/nmogil/gtm-os#readme",
+  "dependencies": {
+    "@ai-sdk/openai": "^2.0.42",
+    "ai": "^5.0.59",
+    "convex": "^1.27.3",
+    "handlebars": "^4.7.8",
+    "resend": "^6.1.2",
+    "svix": "^1.76.1",
+    "zod": "^4.1.11"
+  }
+}
