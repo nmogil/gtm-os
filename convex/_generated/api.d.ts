@@ -21,6 +21,8 @@ import type * as lib_env from "../lib/env.js";
 import type * as lib_errors from "../lib/errors.js";
 import type * as lib_httpAuth from "../lib/httpAuth.js";
 import type * as lib_resend from "../lib/resend.js";
+import type * as lib_templateTests from "../lib/templateTests.js";
+import type * as lib_templates from "../lib/templates.js";
 import type * as mutations from "../mutations.js";
 import type * as queries from "../queries.js";
 import type * as seed from "../seed.js";
@@ -42,6 +44,8 @@ declare const fullApi: ApiFromModules<{
   "lib/errors": typeof lib_errors;
   "lib/httpAuth": typeof lib_httpAuth;
   "lib/resend": typeof lib_resend;
+  "lib/templateTests": typeof lib_templateTests;
+  "lib/templates": typeof lib_templates;
   mutations: typeof mutations;
   queries: typeof queries;
   seed: typeof seed;
