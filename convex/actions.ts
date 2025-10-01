@@ -2,10 +2,38 @@
 
 import { action } from "./_generated/server";
 import { v } from "convex/values";
-import { encrypt } from "./lib/encryption";
-import { validateResendKey } from "./lib/resend";
+// import { validateResendKey } from "./resend"; // Temporarily disabled
 import { generateJourneyWithFallback } from "./lib/ai";
 import { api } from "./_generated/api";
+import { createCipheriv, randomBytes } from "crypto";
+import { Resend } from "resend";
+
+// Inline validateResendKey temporarily
+async function validateResendKey(apiKey: string): Promise<boolean> {
+  try {
+    const resend = new Resend(apiKey);
+    await resend.domains.list();
+    return true;
+  } catch (error: any) {
+    throw new Error("Invalid Resend API key");
+  }
+}
+
+const ALGORITHM = "aes-256-gcm";
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY!; // 32 bytes
+
+function encrypt(text: string): string {
+  const iv = randomBytes(16);
+  const cipher = createCipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY, "hex"), iv);
+
+  let encrypted = cipher.update(text, "utf8", "hex");
+  encrypted += cipher.final("hex");
+
+  const authTag = cipher.getAuthTag();
+
+  // Return iv:authTag:encrypted
+  return iv.toString("hex") + ":" + authTag.toString("hex") + ":" + encrypted;
+}
 
 export const updateResendApiKey = action({
   args: {

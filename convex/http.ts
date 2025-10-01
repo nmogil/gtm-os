@@ -71,4 +71,55 @@ http.route({
   })
 });
 
+// Enroll contact endpoint (PRD Section 3.1, 9.2)
+http.route({
+  path: "/enrollments",
+  method: "POST",
+  handler: authenticatedAction(async (ctx, request, account) => {
+    const body = await request.json();
+    const idempotencyKey = request.headers.get("X-Idempotency-Key");
+
+    // Validate input
+    if (!body.journey_id || !body.contact?.email) {
+      return errorResponse(
+        "invalid_request",
+        "Missing required fields: journey_id and contact.email",
+        {},
+        400
+      );
+    }
+
+    // TODO: Validate Resend key before enrollment
+    // Skipping for now due to Convex "use node" issues
+    // const { getResendClientFromRequest } = await import("./resend");
+    // await getResendClientFromRequest(account, request);
+
+    const result = await ctx.runMutation(api.mutations.createEnrollment, {
+      account_id: account._id,
+      journey_id: body.journey_id,
+      contact: body.contact,
+      options: body.options,
+      idempotency_key: idempotencyKey || undefined
+    });
+
+    return new Response(
+      JSON.stringify({
+        enrollment_id: result.enrollment._id,
+        status: result.enrollment.status,
+        next_run_at: new Date(result.enrollment.next_run_at).toISOString(),
+        test_mode: result.enrollment.test_mode,
+        tags: result.enrollment.tags,
+        existing: result.existing || false,
+        ...(result.existing && {
+          enrolled_at: new Date(result.enrollment.enrolled_at).toISOString()
+        })
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+  })
+});
+
 export default http;

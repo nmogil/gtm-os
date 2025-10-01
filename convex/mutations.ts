@@ -2,6 +2,7 @@ import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { validateJourneyTemplates } from "./lib/templates";
 import { APIError } from "./lib/errors";
+import { createEnrollmentIdempotent } from "./lib/idempotency";
 
 export const storeEncryptedResendApiKey = mutation({
   args: {
@@ -66,5 +67,70 @@ export const createJourneyFromGenerated = mutation({
     });
 
     return { journeyId };
+  }
+});
+
+export const createEnrollment = mutation({
+  args: {
+    account_id: v.id("accounts"),
+    journey_id: v.id("journeys"),
+    contact: v.object({
+      email: v.string(),
+      data: v.optional(v.any())
+    }),
+    options: v.optional(v.object({
+      test_mode: v.optional(v.boolean()),
+      start_at: v.optional(v.number()),
+      reply_to: v.optional(v.string()),
+      tags: v.optional(v.any()),
+      headers: v.optional(v.any())
+    })),
+    idempotency_key: v.optional(v.string())
+  },
+  returns: v.object({
+    enrollment: v.any(),
+    existing: v.boolean()
+  }),
+  handler: async (ctx, args) => {
+    // Check suppression list
+    const suppressed = await ctx.db
+      .query("suppressions")
+      .withIndex("by_email_expires", (q) => q.eq("contact_email", args.contact.email))
+      .first();
+
+    if (suppressed && (!suppressed.expires_at || suppressed.expires_at > Date.now())) {
+      throw new APIError(
+        "contact_suppressed",
+        "Contact is on suppression list",
+        {
+          email: args.contact.email,
+          reason: suppressed.reason,
+          suppressed_at: suppressed.created_at
+        },
+        400
+      );
+    }
+
+    // Create enrollment idempotently
+    const { enrollment, existing } = await createEnrollmentIdempotent(ctx, {
+      account_id: args.account_id,
+      journey_id: args.journey_id,
+      contact_email: args.contact.email,
+      contact_data: args.contact.data || {},
+      idempotency_key: args.idempotency_key
+    });
+
+    // Update with options if new enrollment
+    if (!existing && args.options) {
+      await ctx.db.patch(enrollment._id, {
+        test_mode: args.options.test_mode || false,
+        next_run_at: args.options.start_at || Date.now(),
+        reply_to: args.options.reply_to,
+        tags: args.options.tags,
+        custom_headers: args.options.headers
+      });
+    }
+
+    return { enrollment, existing };
   }
 });
