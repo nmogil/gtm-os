@@ -14,6 +14,11 @@ import type {
   FunctionReference,
 } from "convex/server";
 import type * as http from "../http.js";
+import type * as lib_auth from "../lib/auth.js";
+import type * as lib_errors from "../lib/errors.js";
+import type * as lib_httpAuth from "../lib/httpAuth.js";
+import type * as queries from "../queries.js";
+import type * as seed from "../seed.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -25,6 +30,11 @@ import type * as http from "../http.js";
  */
 declare const fullApi: ApiFromModules<{
   http: typeof http;
+  "lib/auth": typeof lib_auth;
+  "lib/errors": typeof lib_errors;
+  "lib/httpAuth": typeof lib_httpAuth;
+  queries: typeof queries;
+  seed: typeof seed;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,

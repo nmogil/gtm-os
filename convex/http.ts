@@ -1,4 +1,5 @@
 import { httpRouter } from "convex/server";
+import { authenticatedAction } from "./lib/httpAuth";
 
 /**
  * HTTP endpoints for GTM OS
@@ -6,6 +7,16 @@ import { httpRouter } from "convex/server";
  */
 const http = httpRouter();
 
-// HTTP routes will be defined here
+// Health check endpoint (authenticated)
+http.route({
+  path: "/health",
+  method: "GET",
+  handler: authenticatedAction(async (ctx, request, account) => {
+    return new Response(
+      JSON.stringify({ status: "ok", account_id: account._id }),
+      { headers: { "Content-Type": "application/json" } }
+    );
+  })
+});
 
 export default http;
