@@ -4,6 +4,7 @@ import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { encrypt } from "./lib/encryption";
 import { validateResendKey } from "./lib/resend";
+import { generateJourneyWithFallback } from "./lib/ai";
 import { api } from "./_generated/api";
 
 export const updateResendApiKey = action({
@@ -25,5 +26,21 @@ export const updateResendApiKey = action({
     });
 
     return { success: true };
+  }
+});
+
+export const generateJourneyAction = action({
+  args: {
+    goal: v.string(),
+    audience: v.string(),
+    emailCount: v.number()
+  },
+  handler: async (ctx, args) => {
+    // Generate journey with AI (can use fetch in actions)
+    return await generateJourneyWithFallback(
+      args.goal,
+      args.audience,
+      args.emailCount
+    );
   }
 });

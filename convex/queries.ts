@@ -11,3 +11,10 @@ export const getAccountByApiKey = query({
     return account;
   }
 });
+
+export const getJourney = query({
+  args: { journey_id: v.id("journeys") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.journey_id);
+  }
+});
