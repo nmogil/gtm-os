@@ -9,4 +9,10 @@ crons.interval(
   internal.idempotency.cleanupExpiredKeys
 );
 
+crons.interval(
+  "process pending sends",
+  { minutes: 1 },
+  internal.scheduler.processPendingSends
+);
+
 export default crons;
