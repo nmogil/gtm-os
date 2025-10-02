@@ -14,6 +14,7 @@ import type {
   FunctionReference,
 } from "convex/server";
 import type * as actions from "../actions.js";
+import type * as cleanup from "../cleanup.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as idempotency from "../idempotency.js";
@@ -28,8 +29,11 @@ import type * as lib_messageIdempotency from "../lib/messageIdempotency.js";
 import type * as lib_templateTests from "../lib/templateTests.js";
 import type * as lib_templates from "../lib/templates.js";
 import type * as lib_utils from "../lib/utils.js";
+import type * as lib_validation from "../lib/validation.js";
 import type * as mutations from "../mutations.js";
 import type * as queries from "../queries.js";
+import type * as scheduler from "../scheduler.js";
+import type * as schedulerActions from "../schedulerActions.js";
 import type * as seed from "../seed.js";
 
 /**
@@ -42,6 +46,7 @@ import type * as seed from "../seed.js";
  */
 declare const fullApi: ApiFromModules<{
   actions: typeof actions;
+  cleanup: typeof cleanup;
   crons: typeof crons;
   http: typeof http;
   idempotency: typeof idempotency;
@@ -56,8 +61,11 @@ declare const fullApi: ApiFromModules<{
   "lib/templateTests": typeof lib_templateTests;
   "lib/templates": typeof lib_templates;
   "lib/utils": typeof lib_utils;
+  "lib/validation": typeof lib_validation;
   mutations: typeof mutations;
   queries: typeof queries;
+  scheduler: typeof scheduler;
+  schedulerActions: typeof schedulerActions;
   seed: typeof seed;
 }>;
 export declare const api: FilterApi<

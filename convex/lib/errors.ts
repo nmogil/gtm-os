@@ -7,7 +7,8 @@ export type ErrorCode =
   | "llm_generation_failed"
   | "template_render_failed"
   | "webhook_verification_failed"
-  | "contact_suppressed";
+  | "contact_suppressed"
+  | "invalid_email";
 
 export class APIError extends Error {
   constructor(

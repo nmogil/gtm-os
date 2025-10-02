@@ -182,12 +182,19 @@ export const processBatchAction = internalAction({
         const renderedBody = renderTemplate(stage.body, templateContext);
 
         // Add to batch
+        // Use reply_to only if it's a non-empty string, otherwise use journey default
+        const reply_to = (enrollment.reply_to && enrollment.reply_to.trim() !== "")
+          ? enrollment.reply_to
+          : (journey.default_reply_to && journey.default_reply_to.trim() !== "")
+            ? journey.default_reply_to
+            : undefined;
+
         batchEmails.push({
           from: "digest@paper-boy.app",
           to: [enrollment.contact_email],
           subject: renderedSubject,
           html: renderedBody,
-          reply_to: enrollment.reply_to || journey.default_reply_to,
+          reply_to,
           headers: {
             "X-Enrollment-ID": enrollment._id,
             "X-Journey-ID": enrollment.journey_id,
@@ -254,34 +261,74 @@ async function sendBatch(
         html: email.html
       };
 
-      // Only include optional fields if they have values
-      if (email.reply_to) {
+      // Only include optional fields if they have valid, non-empty values
+      if (email.reply_to && email.reply_to.trim() !== "") {
         emailPayload.reply_to = email.reply_to;
       }
       if (email.headers && Object.keys(email.headers).length > 0) {
-        emailPayload.headers = email.headers;
+        // Filter out empty string values from headers
+        const validHeaders: Record<string, string> = {};
+        for (const [key, value] of Object.entries(email.headers)) {
+          if (value && String(value).trim() !== "") {
+            validHeaders[key] = value;
+          }
+        }
+        if (Object.keys(validHeaders).length > 0) {
+          emailPayload.headers = validHeaders;
+        }
       }
       if (email.tags && email.tags.length > 0) {
-        emailPayload.tags = email.tags;
+        // Filter out tags with empty name or value
+        const validTags = email.tags.filter(tag =>
+          tag.name && tag.name.trim() !== "" &&
+          tag.value && tag.value.trim() !== ""
+        );
+        if (validTags.length > 0) {
+          emailPayload.tags = validTags;
+        }
       }
 
       return emailPayload;
     });
 
-    console.log("Sending batch to Resend:", JSON.stringify(resendEmails[0], null, 2));
+    console.log("=== RESEND BATCH SEND DEBUG ===");
     console.log("Total emails in batch:", resendEmails.length);
+    console.log("First email payload:", JSON.stringify(resendEmails[0], null, 2));
+
+    // Validate no empty strings in critical fields
+    resendEmails.forEach((email, index) => {
+      if (email.reply_to === "") {
+        console.warn(`⚠️  Email ${index} has empty reply_to (should be omitted)`);
+      }
+      if (email.tags) {
+        email.tags.forEach((tag: any, tagIndex: number) => {
+          if (tag.name === "" || tag.value === "") {
+            console.warn(`⚠️  Email ${index}, tag ${tagIndex} has empty name or value:`, tag);
+          }
+        });
+      }
+    });
 
     const results = await resend.batch.send(resendEmails);
 
-    if (!results.data) {
+    console.log("=== RESEND API RESPONSE ===");
+    console.log("results.data:", results.data);
+    console.log("results.error:", results.error);
+
+    // Resend batch API returns { data: { data: [...] } }
+    const batchData = results.data?.data;
+
+    if (!batchData || !Array.isArray(batchData)) {
       console.error("Batch send failed - no data:", JSON.stringify(results, null, 2));
       console.error("First email payload:", JSON.stringify(resendEmails[0], null, 2));
       return;
     }
 
+    console.log("Successfully sent", batchData.length, "emails");
+
     // Process results
-    for (let i = 0; i < results.data.length; i++) {
-      const result = results.data[i];
+    for (let i = 0; i < batchData.length; i++) {
+      const result = batchData[i];
       const email = emails[i];
 
       if (result.id) {

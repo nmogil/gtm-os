@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { validateJourneyTemplates } from "./lib/templates";
 import { APIError } from "./lib/errors";
 import { createEnrollmentIdempotent } from "./lib/idempotency";
+import { validateEmail } from "./lib/validation";
 
 export const storeEncryptedResendApiKey = mutation({
   args: {
@@ -92,6 +93,17 @@ export const createEnrollment = mutation({
     existing: v.boolean()
   }),
   handler: async (ctx, args) => {
+    // Validate email
+    const emailValidation = validateEmail(args.contact.email);
+    if (!emailValidation.valid) {
+      throw new APIError(
+        "invalid_email",
+        emailValidation.error || "Invalid email address",
+        { email: args.contact.email },
+        400
+      );
+    }
+
     // Check suppression list
     const suppressed = await ctx.db
       .query("suppressions")
@@ -129,8 +141,71 @@ export const createEnrollment = mutation({
         tags: args.options.tags,
         custom_headers: args.options.headers
       });
+
+      // Re-fetch enrollment to get updated fields
+      const updatedEnrollment = await ctx.db.get(enrollment._id);
+      return { enrollment: updatedEnrollment!, existing };
     }
 
     return { enrollment, existing };
+  }
+});
+
+export const deleteEnrollmentsByEmail = mutation({
+  args: {
+    email_pattern: v.string()
+  },
+  returns: v.object({
+    deleted_count: v.number()
+  }),
+  handler: async (ctx, args) => {
+    // Find all enrollments with emails matching the pattern
+    const allEnrollments = await ctx.db
+      .query("enrollments")
+      .collect();
+
+    let deletedCount = 0;
+    for (const enrollment of allEnrollments) {
+      if (enrollment.contact_email.includes(args.email_pattern)) {
+        await ctx.db.delete(enrollment._id);
+        deletedCount++;
+      }
+    }
+
+    return { deleted_count: deletedCount };
+  }
+});
+
+export const updateEnrollment = mutation({
+  args: {
+    enrollment_id: v.id("enrollments"),
+    test_mode: v.optional(v.boolean()),
+    next_run_at: v.optional(v.number()),
+    status: v.optional(v.union(
+      v.literal("active"),
+      v.literal("completed"),
+      v.literal("converted"),
+      v.literal("removed"),
+      v.literal("failed"),
+      v.literal("suppressed")
+    ))
+  },
+  returns: v.object({
+    success: v.boolean()
+  }),
+  handler: async (ctx, args) => {
+    const updates: any = {};
+    if (args.test_mode !== undefined) {
+      updates.test_mode = args.test_mode;
+    }
+    if (args.next_run_at !== undefined) {
+      updates.next_run_at = args.next_run_at;
+    }
+    if (args.status !== undefined) {
+      updates.status = args.status;
+    }
+
+    await ctx.db.patch(args.enrollment_id, updates);
+    return { success: true };
   }
 });

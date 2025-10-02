@@ -94,13 +94,28 @@ http.route({
     // const { getResendClientFromRequest } = await import("./resend");
     // await getResendClientFromRequest(account, request);
 
-    const result = await ctx.runMutation(api.mutations.createEnrollment, {
-      account_id: account._id,
-      journey_id: body.journey_id,
-      contact: body.contact,
-      options: body.options,
-      idempotency_key: idempotencyKey || undefined
-    });
+    let result;
+    try {
+      result = await ctx.runMutation(api.mutations.createEnrollment, {
+        account_id: account._id,
+        journey_id: body.journey_id,
+        contact: body.contact,
+        options: body.options,
+        idempotency_key: idempotencyKey || undefined
+      });
+    } catch (error: any) {
+      // Handle APIError from mutation
+      console.error("Enrollment creation error:", error);
+
+      // Convex wraps errors, check both error.data and direct properties
+      const errorData = error.data || error;
+      const code = errorData.code || "enrollment_failed";
+      const message = errorData.message || error.message || "Failed to create enrollment";
+      const details = errorData.details || {};
+      const statusCode = errorData.statusCode || 400;
+
+      return errorResponse(code, message, details, statusCode);
+    }
 
     return new Response(
       JSON.stringify({
