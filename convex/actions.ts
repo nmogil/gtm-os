@@ -1,6 +1,6 @@
 "use node";
 
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 // import { validateResendKey } from "./resend"; // Temporarily disabled
 import { generateJourneyWithFallback } from "./lib/ai";
@@ -9,13 +9,13 @@ import { createCipheriv, randomBytes } from "crypto";
 import { Resend } from "resend";
 
 // Inline validateResendKey temporarily
-async function validateResendKey(apiKey: string): Promise<boolean> {
-  try {
-    const resend = new Resend(apiKey);
-    await resend.domains.list();
-    return true;
-  } catch (error: any) {
-    throw new Error("Invalid Resend API key");
+async function validateResendKey(apiKey: string): Promise<void> {
+  const resend = new Resend(apiKey);
+  const result = await resend.domains.list();
+
+  // Check if the result indicates an error
+  if (result.error) {
+    throw new Error(`Invalid Resend API key: ${result.error.message}`);
   }
 }
 
@@ -33,6 +33,22 @@ function encrypt(text: string): string {
 
   // Return iv:authTag:encrypted
   return iv.toString("hex") + ":" + authTag.toString("hex") + ":" + encrypted;
+}
+
+function decrypt(encryptedData: string): string {
+  const { createDecipheriv } = require("crypto");
+  const parts = encryptedData.split(":");
+  const iv = Buffer.from(parts[0], "hex");
+  const authTag = Buffer.from(parts[1], "hex");
+  const encrypted = parts[2];
+
+  const decipher = createDecipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY, "hex"), iv);
+  decipher.setAuthTag(authTag);
+
+  let decrypted = decipher.update(encrypted, "hex", "utf8");
+  decrypted += decipher.final("utf8");
+
+  return decrypted;
 }
 
 export const updateResendApiKey = action({
@@ -70,5 +86,45 @@ export const generateJourneyAction = action({
       args.audience,
       args.emailCount
     );
+  }
+});
+
+export const validateResendKeyAction = internalAction({
+  args: {
+    resend_api_key_encrypted: v.optional(v.string()),
+    override_key: v.optional(v.string())
+  },
+  returns: v.object({
+    valid: v.boolean(),
+    error: v.optional(v.string())
+  }),
+  handler: async (ctx, args) => {
+    try {
+      let apiKey: string;
+
+      // Priority: override_key > encrypted_key > system default
+      if (args.override_key) {
+        apiKey = args.override_key;
+      } else if (args.resend_api_key_encrypted) {
+        apiKey = decrypt(args.resend_api_key_encrypted);
+      } else if (process.env.RESEND_API_KEY) {
+        apiKey = process.env.RESEND_API_KEY;
+      } else {
+        return {
+          valid: false,
+          error: "No Resend API key available"
+        };
+      }
+
+      // Test the key with lightweight API call
+      await validateResendKey(apiKey);
+
+      return { valid: true };
+    } catch (error: any) {
+      return {
+        valid: false,
+        error: error.message || "Invalid Resend API key"
+      };
+    }
   }
 });

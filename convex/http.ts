@@ -1,7 +1,7 @@
 import { httpRouter } from "convex/server";
 import { authenticatedAction } from "./lib/httpAuth";
 import { errorResponse } from "./lib/errors";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 
 /**
  * HTTP endpoints for GTM OS
@@ -89,10 +89,23 @@ http.route({
       );
     }
 
-    // TODO: Validate Resend key before enrollment
-    // Skipping for now due to Convex "use node" issues
-    // const { getResendClientFromRequest } = await import("./resend");
-    // await getResendClientFromRequest(account, request);
+    // Validate Resend key before enrollment
+    const overrideKey = request.headers.get("X-Resend-Key");
+    const validation = await ctx.runAction(internal.actions.validateResendKeyAction, {
+      resend_api_key_encrypted: account.resend_api_key_encrypted,
+      override_key: overrideKey || undefined
+    });
+
+    if (!validation.valid) {
+      return errorResponse(
+        "invalid_resend_key",
+        validation.error || "Invalid Resend API key",
+        {
+          hint: "Set a valid Resend API key in your account settings or provide X-Resend-Key header"
+        },
+        401
+      );
+    }
 
     let result;
     try {
