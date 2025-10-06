@@ -26,7 +26,6 @@ import type * as lib_errors from "../lib/errors.js";
 import type * as lib_httpAuth from "../lib/httpAuth.js";
 import type * as lib_idempotency from "../lib/idempotency.js";
 import type * as lib_messageIdempotency from "../lib/messageIdempotency.js";
-import type * as lib_templateTests from "../lib/templateTests.js";
 import type * as lib_templates from "../lib/templates.js";
 import type * as lib_utils from "../lib/utils.js";
 import type * as lib_validation from "../lib/validation.js";
@@ -60,7 +59,6 @@ declare const fullApi: ApiFromModules<{
   "lib/httpAuth": typeof lib_httpAuth;
   "lib/idempotency": typeof lib_idempotency;
   "lib/messageIdempotency": typeof lib_messageIdempotency;
-  "lib/templateTests": typeof lib_templateTests;
   "lib/templates": typeof lib_templates;
   "lib/utils": typeof lib_utils;
   "lib/validation": typeof lib_validation;

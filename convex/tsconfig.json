@@ -1,5 +1,5 @@
 {
-  "extends": "../node_modules/convex/tsconfig.base.json",
+  "extends": "../node_modules/convex/tsconfig.json",
   "compilerOptions": {
     "moduleResolution": "bundler",
     "jsx": "preserve"

@@ -38,3 +38,8 @@ export function cleanupExpiredKeys() {
     }
   }
 }
+
+// Test helper to clear cache between tests
+export function clearIdempotencyCache() {
+  idempotencyCache.clear();
+}

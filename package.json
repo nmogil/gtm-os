@@ -5,7 +5,10 @@
   "main": "index.js",
   "scripts": {
     "dev": "convex dev",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage"
   },
   "repository": {
     "type": "git",
@@ -30,6 +33,10 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
-    "tsx": "^4.20.6"
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "@vitest/ui": "^2.0.0",
+    "tsx": "^4.20.6",
+    "vitest": "^2.0.0"
   }
 }
