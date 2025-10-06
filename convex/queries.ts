@@ -426,3 +426,77 @@ export const getSuppressions = query({
     };
   }
 });
+
+// ===== MONITORING QUERIES (Issue #15) =====
+
+export const getActiveEnrollmentsCount = query({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const active = await ctx.db
+      .query("enrollments")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+    return active.length;
+  }
+});
+
+export const getPendingSendsCount = query({
+  args: { timestamp: v.number() },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const pending = await ctx.db
+      .query("enrollments")
+      .withIndex("by_next_run_at")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.lte(q.field("next_run_at"), args.timestamp)
+        )
+      )
+      .collect();
+    return pending.length;
+  }
+});
+
+export const getErrorMetrics = query({
+  args: {},
+  returns: v.object({
+    error_rate: v.number(),
+    failed_24h: v.number(),
+    webhook_lag: v.number()
+  }),
+  handler: async (ctx) => {
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+
+    // Get recent messages
+    const recentMessages = await ctx.db
+      .query("messages")
+      .filter((q) => q.gte(q.field("_creationTime"), oneDayAgo))
+      .collect();
+
+    const total = recentMessages.length;
+    const failed = recentMessages.filter((m) => m.status === "failed").length;
+    const error_rate = total > 0 ? failed / total : 0;
+
+    // Get failed enrollments in last 24h
+    const failedEnrollments = await ctx.db
+      .query("enrollments")
+      .withIndex("by_status", (q) => q.eq("status", "failed"))
+      .filter((q) => q.gte(q.field("_creationTime"), oneDayAgo))
+      .collect();
+
+    // Get unprocessed webhooks older than 1 minute
+    const unprocessedWebhooks = await ctx.db
+      .query("webhook_events")
+      .withIndex("by_processed", (q) => q.eq("processed", false))
+      .filter((q) => q.lte(q.field("_creationTime"), Date.now() - 60000))
+      .collect();
+
+    return {
+      error_rate,
+      failed_24h: failedEnrollments.length,
+      webhook_lag: unprocessedWebhooks.length
+    };
+  }
+});

@@ -30,6 +30,7 @@ import type * as lib_templateTests from "../lib/templateTests.js";
 import type * as lib_templates from "../lib/templates.js";
 import type * as lib_utils from "../lib/utils.js";
 import type * as lib_validation from "../lib/validation.js";
+import type * as metrics from "../metrics.js";
 import type * as mutations from "../mutations.js";
 import type * as queries from "../queries.js";
 import type * as scheduler from "../scheduler.js";
@@ -63,6 +64,7 @@ declare const fullApi: ApiFromModules<{
   "lib/templates": typeof lib_templates;
   "lib/utils": typeof lib_utils;
   "lib/validation": typeof lib_validation;
+  metrics: typeof metrics;
   mutations: typeof mutations;
   queries: typeof queries;
   scheduler: typeof scheduler;

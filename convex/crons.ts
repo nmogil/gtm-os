@@ -15,4 +15,10 @@ crons.interval(
   internal.scheduler.processPendingSends
 );
 
+crons.interval(
+  "collect metrics",
+  { hours: 1 },
+  internal.metrics.collectAndLogMetrics
+);
+
 export default crons;

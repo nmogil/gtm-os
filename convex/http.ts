@@ -12,14 +12,48 @@ import { Id } from "./_generated/dataModel";
  */
 const http = httpRouter();
 
-// Health check endpoint (authenticated)
+// Enhanced health check endpoint with metrics (Issue #15)
 http.route({
   path: "/health",
   method: "GET",
   handler: authenticatedAction(async (ctx, request, account) => {
+    const now = Date.now();
+
+    // Get active enrollments count
+    const activeEnrollments = await ctx.runQuery(
+      api.queries.getActiveEnrollmentsCount,
+      {}
+    );
+
+    // Get pending sends count
+    const pendingSends = await ctx.runQuery(
+      api.queries.getPendingSendsCount,
+      { timestamp: now }
+    );
+
+    // Get error metrics
+    const errorMetrics = await ctx.runQuery(
+      api.queries.getErrorMetrics,
+      {}
+    );
+
     return new Response(
-      JSON.stringify({ status: "ok", account_id: account._id }),
-      { headers: { "Content-Type": "application/json" } }
+      JSON.stringify({
+        status: "ok",
+        timestamp: now,
+        account_id: account._id,
+        metrics: {
+          active_enrollments: activeEnrollments,
+          pending_sends: pendingSends,
+          error_rate: errorMetrics.error_rate,
+          failed_enrollments_24h: errorMetrics.failed_24h,
+          webhook_processing_lag: errorMetrics.webhook_lag
+        }
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
     );
   })
 });
