@@ -2,6 +2,7 @@ import { httpRouter } from "convex/server";
 import { authenticatedAction } from "./lib/httpAuth";
 import { errorResponse } from "./lib/errors";
 import { api, internal } from "./_generated/api";
+import { handleResendWebhook } from "./webhooks";
 
 /**
  * HTTP endpoints for GTM OS
@@ -148,6 +149,13 @@ http.route({
       }
     );
   })
+});
+
+// Resend webhook endpoint (PRD Section 5.3)
+http.route({
+  path: "/webhooks/resend",
+  method: "POST",
+  handler: handleResendWebhook
 });
 
 export default http;

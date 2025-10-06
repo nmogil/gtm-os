@@ -209,3 +209,295 @@ export const updateEnrollment = mutation({
     return { success: true };
   }
 });
+
+/**
+ * Create webhook event record (with idempotency)
+ * PRD Reference: Section 5.3 - Webhook Processing
+ */
+export const createWebhookEvent = mutation({
+  args: {
+    account_id: v.id("accounts"),
+    resend_event_id: v.string(),
+    event_type: v.string(),
+    contact_email: v.string(),
+    message_id: v.optional(v.string()),
+    enrollment_id: v.optional(v.string()),
+    payload: v.any()
+  },
+  returns: v.object({
+    webhook_event_id: v.id("webhook_events"),
+    duplicate: v.boolean()
+  }),
+  handler: async (ctx, args) => {
+    // Check for duplicate event (idempotency)
+    const existing = await ctx.db
+      .query("webhook_events")
+      .withIndex("by_resend_event_id", (q) =>
+        q.eq("resend_event_id", args.resend_event_id)
+      )
+      .first();
+
+    if (existing) {
+      return { webhook_event_id: existing._id, duplicate: true };
+    }
+
+    // Create new webhook event record
+    const webhookEventId = await ctx.db.insert("webhook_events", {
+      account_id: args.account_id,
+      resend_event_id: args.resend_event_id,
+      event_type: args.event_type,
+      contact_email: args.contact_email,
+      message_id: args.message_id,
+      enrollment_id: args.enrollment_id,
+      payload: args.payload,
+      processed: false,
+      retry_count: 0,
+      created_at: Date.now()
+    });
+
+    return { webhook_event_id: webhookEventId, duplicate: false };
+  }
+});
+
+/**
+ * Process webhook event and update relevant records
+ * PRD Reference: Section 5.3 - Webhook Processing
+ */
+export const processWebhookEvent = mutation({
+  args: {
+    webhook_event_id: v.id("webhook_events")
+  },
+  returns: v.object({
+    processed: v.boolean(),
+    actions: v.array(v.string())
+  }),
+  handler: async (ctx, args) => {
+    const webhookEvent = await ctx.db.get(args.webhook_event_id);
+
+    if (!webhookEvent || webhookEvent.processed) {
+      return { processed: false, actions: [] };
+    }
+
+    const { event_type, payload } = webhookEvent;
+    const actions: Array<string> = [];
+
+    // Extract data from payload
+    const emailId = payload.data?.email_id;
+    const emailData = payload.data;
+
+    switch (event_type) {
+      case "email.sent":
+        if (emailId) {
+          const message = await ctx.db
+            .query("messages")
+            .withIndex("by_resend_message_id", (q) =>
+              q.eq("resend_message_id", emailId)
+            )
+            .first();
+
+          if (message) {
+            await ctx.db.patch(message._id, {
+              status: "sent",
+              delivery_status: "sent",
+              sent_at: new Date(emailData.created_at).getTime()
+            });
+            actions.push("message_status_updated");
+          }
+        }
+        break;
+
+      case "email.delivered":
+        if (emailId) {
+          const message = await ctx.db
+            .query("messages")
+            .withIndex("by_resend_message_id", (q) =>
+              q.eq("resend_message_id", emailId)
+            )
+            .first();
+
+          if (message) {
+            await ctx.db.patch(message._id, {
+              delivery_status: "delivered",
+              delivered_at: new Date(emailData.created_at).getTime()
+            });
+            actions.push("delivery_confirmed");
+          }
+        }
+        break;
+
+      case "email.bounced":
+        await handleBounce(ctx, webhookEvent, emailData);
+        actions.push("bounce_processed");
+        break;
+
+      case "email.complained":
+        await handleComplaint(ctx, webhookEvent, emailData);
+        actions.push("complaint_processed");
+        break;
+
+      case "email.opened":
+        const enrollmentIdOpen = emailData.headers?.['"X-Enrollment-ID"'] ||
+                                emailData.headers?.["X-Enrollment-ID"];
+        const journeyIdOpen = emailData.headers?.['"X-Journey-ID"'] ||
+                             emailData.headers?.["X-Journey-ID"];
+        const stageOpen = emailData.headers?.['"X-Stage"'] ||
+                         emailData.headers?.["X-Stage"];
+
+        await ctx.db.insert("events", {
+          account_id: webhookEvent.account_id,
+          contact_email: webhookEvent.contact_email,
+          enrollment_id: enrollmentIdOpen,
+          journey_id: journeyIdOpen,
+          event_type: "open",
+          metadata: {
+            opened_at: emailData.created_at,
+            stage: stageOpen ? parseInt(stageOpen) : undefined
+          },
+          timestamp: Date.now()
+        });
+        actions.push("open_tracked");
+        break;
+
+      case "email.clicked":
+        const enrollmentIdClick = emailData.headers?.['"X-Enrollment-ID"'] ||
+                                 emailData.headers?.["X-Enrollment-ID"];
+        const journeyIdClick = emailData.headers?.['"X-Journey-ID"'] ||
+                              emailData.headers?.["X-Journey-ID"];
+        const stageClick = emailData.headers?.['"X-Stage"'] ||
+                          emailData.headers?.["X-Stage"];
+
+        await ctx.db.insert("events", {
+          account_id: webhookEvent.account_id,
+          contact_email: webhookEvent.contact_email,
+          enrollment_id: enrollmentIdClick,
+          journey_id: journeyIdClick,
+          event_type: "click",
+          metadata: {
+            clicked_at: emailData.created_at,
+            url: emailData.click?.link,
+            stage: stageClick ? parseInt(stageClick) : undefined
+          },
+          timestamp: Date.now()
+        });
+        actions.push("click_tracked");
+        break;
+    }
+
+    // Mark webhook event as processed
+    await ctx.db.patch(webhookEvent._id, {
+      processed: true,
+      processed_at: Date.now()
+    });
+
+    return { processed: true, actions };
+  }
+});
+
+/**
+ * Helper function to handle bounce events
+ */
+async function handleBounce(ctx: any, webhookEvent: any, emailData: any) {
+  const bounceType = emailData.bounce?.type || "soft";
+  const emailId = emailData.email_id;
+
+  // Update message record
+  if (emailId) {
+    const message = await ctx.db
+      .query("messages")
+      .withIndex("by_resend_message_id", (q) =>
+        q.eq("resend_message_id", emailId)
+      )
+      .first();
+
+    if (message) {
+      await ctx.db.patch(message._id, {
+        delivery_status: "bounced",
+        bounce_type: bounceType === "hard" ? "hard" : "soft",
+        error_detail: emailData.bounce?.reason
+      });
+    }
+  }
+
+  // Only create suppression for hard bounces
+  if (bounceType === "hard") {
+    // Create suppression
+    await ctx.db.insert("suppressions", {
+      account_id: webhookEvent.account_id,
+      contact_email: webhookEvent.contact_email,
+      journey_id: undefined,
+      reason: "hard_bounce",
+      metadata: { bounce_reason: emailData.bounce?.reason },
+      created_at: Date.now()
+    });
+
+    // Stop all active enrollments for this email
+    const enrollments = await ctx.db
+      .query("enrollments")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("contact_email"), webhookEvent.contact_email),
+          q.eq(q.field("status"), "active")
+        )
+      )
+      .collect();
+
+    for (const enrollment of enrollments) {
+      await ctx.db.patch(enrollment._id, {
+        status: "suppressed",
+        last_error: "hard_bounce"
+      });
+    }
+  }
+}
+
+/**
+ * Helper function to handle spam complaint events
+ */
+async function handleComplaint(ctx: any, webhookEvent: any, emailData: any) {
+  const emailId = emailData.email_id;
+
+  // Update message record
+  if (emailId) {
+    const message = await ctx.db
+      .query("messages")
+      .withIndex("by_resend_message_id", (q) =>
+        q.eq("resend_message_id", emailId)
+      )
+      .first();
+
+    if (message) {
+      await ctx.db.patch(message._id, {
+        delivery_status: "complained",
+        error_detail: "spam_complaint"
+      });
+    }
+  }
+
+  // Create global suppression for spam complaints
+  await ctx.db.insert("suppressions", {
+    account_id: webhookEvent.account_id,
+    contact_email: webhookEvent.contact_email,
+    journey_id: undefined, // Global suppression
+    reason: "spam_complaint",
+    metadata: { complaint_type: emailData.complaint?.type },
+    created_at: Date.now()
+  });
+
+  // Stop ALL enrollments for this email (global suppression)
+  const enrollments = await ctx.db
+    .query("enrollments")
+    .filter((q) =>
+      q.and(
+        q.eq(q.field("contact_email"), webhookEvent.contact_email),
+        q.eq(q.field("status"), "active")
+      )
+    )
+    .collect();
+
+  for (const enrollment of enrollments) {
+    await ctx.db.patch(enrollment._id, {
+      status: "suppressed",
+      last_error: "spam_complaint"
+    });
+  }
+}

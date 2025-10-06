@@ -196,6 +196,7 @@ export const processBatchAction = internalAction({
           html: renderedBody,
           reply_to,
           headers: {
+            "X-Account-ID": args.accountId,
             "X-Enrollment-ID": enrollment._id,
             "X-Journey-ID": enrollment.journey_id,
             "X-Stage": String(enrollment.current_stage),

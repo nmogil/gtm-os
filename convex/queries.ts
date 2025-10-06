@@ -66,3 +66,38 @@ export const getMessagesByEnrollmentId = query({
       .collect();
   }
 });
+
+export const getAllWebhookEvents = query({
+  args: {},
+  returns: v.array(v.any()),
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("webhook_events")
+      .order("desc")
+      .take(10);
+  }
+});
+
+export const getWebhookEventsByAccount = query({
+  args: { account_id: v.id("accounts") },
+  returns: v.array(v.any()),
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("webhook_events")
+      .withIndex("by_account", (q) => q.eq("account_id", args.account_id))
+      .order("desc")
+      .take(10);
+  }
+});
+
+export const getMessageByResendId = query({
+  args: { resend_message_id: v.string() },
+  returns: v.union(v.any(), v.null()),
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("messages")
+      .withIndex("by_resend_message_id", (q) =>
+        q.eq("resend_message_id", args.resend_message_id))
+      .first();
+  }
+});

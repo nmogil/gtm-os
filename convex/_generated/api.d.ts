@@ -35,6 +35,7 @@ import type * as queries from "../queries.js";
 import type * as scheduler from "../scheduler.js";
 import type * as schedulerActions from "../schedulerActions.js";
 import type * as seed from "../seed.js";
+import type * as webhooks from "../webhooks.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   scheduler: typeof scheduler;
   schedulerActions: typeof schedulerActions;
   seed: typeof seed;
+  webhooks: typeof webhooks;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,
