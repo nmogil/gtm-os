@@ -13,6 +13,7 @@ export type ErrorCode =
   | "invalid_request"
   | "invalid_resend_key"
   | "enrollment_failed"
+  | "enrollment_not_found"
   | "event_not_found"
   | "invalid_event_type";
 

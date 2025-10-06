@@ -70,6 +70,7 @@ export default defineSchema({
     custom_headers: v.optional(v.any())
   })
     .index("by_account", ["account_id"])
+    .index("by_journey", ["journey_id"])
     .index("by_status", ["status"])
     .index("by_next_run_at", ["next_run_at"])
     .index("by_account_journey_email", ["account_id", "journey_id", "contact_email"]),
@@ -143,7 +144,8 @@ export default defineSchema({
     created_at: v.number()
   })
     .index("by_journey_email", ["journey_id", "contact_email"])
-    .index("by_email_expires", ["contact_email", "expires_at"]),
+    .index("by_email_expires", ["contact_email", "expires_at"])
+    .index("by_account_and_reason", ["account_id", "reason"]),
 
   webhook_events: defineTable({
     account_id: v.id("accounts"),

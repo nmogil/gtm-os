@@ -213,6 +213,123 @@ http.route({
   })
 });
 
+// Journey analytics endpoint (PRD Section 3.1, 9.4)
+http.route({
+  pathPrefix: "/journeys/",
+  method: "GET",
+  handler: authenticatedAction(async (ctx, request, account) => {
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split("/").filter(p => p);
+
+    // Check if this is the analytics endpoint: /journeys/:id/analytics
+    if (pathParts.length !== 3 || pathParts[2] !== "analytics") {
+      return new Response("Not Found", { status: 404 });
+    }
+
+    const journeyId = pathParts[1];
+
+    // Get analytics
+    const analytics = await ctx.runQuery(api.queries.getJourneyAnalytics, {
+      journey_id: journeyId as Id<"journeys">,
+      account_id: account._id
+    }).catch(() => null);
+
+    if (!analytics) {
+      return errorResponse(
+        "journey_not_found",
+        "Journey not found",
+        {},
+        404
+      );
+    }
+
+    return new Response(
+      JSON.stringify(analytics),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+  })
+});
+
+// Enrollment timeline endpoint (PRD Section 3.1, 9.5)
+http.route({
+  pathPrefix: "/enrollments/",
+  method: "GET",
+  handler: authenticatedAction(async (ctx, request, account) => {
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split("/").filter(p => p);
+
+    // Check if this is the timeline endpoint: /enrollments/:id/timeline
+    if (pathParts.length !== 3 || pathParts[2] !== "timeline") {
+      return new Response("Not Found", { status: 404 });
+    }
+
+    const enrollmentId = pathParts[1];
+
+    // Get timeline
+    const timeline = await ctx.runQuery(api.queries.getEnrollmentTimeline, {
+      enrollment_id: enrollmentId as Id<"enrollments">,
+      account_id: account._id
+    }).catch(() => null);
+
+    if (!timeline) {
+      return errorResponse(
+        "enrollment_not_found",
+        "Enrollment not found",
+        {},
+        404
+      );
+    }
+
+    return new Response(
+      JSON.stringify(timeline),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+  })
+});
+
+// Suppressions list endpoint (PRD Section 3.1)
+http.route({
+  path: "/suppressions",
+  method: "GET",
+  handler: authenticatedAction(async (ctx, request, account) => {
+    const url = new URL(request.url);
+    const journeyId = url.searchParams.get("journey_id");
+    const reason = url.searchParams.get("reason");
+
+    const args: {
+      account_id: Id<"accounts">;
+      journey_id?: Id<"journeys">;
+      reason?: "hard_bounce" | "soft_bounce" | "spam_complaint" | "unsubscribe" | "manual";
+    } = {
+      account_id: account._id
+    };
+
+    if (journeyId) {
+      args.journey_id = journeyId as Id<"journeys">;
+    }
+
+    if (reason) {
+      args.reason = reason as "hard_bounce" | "soft_bounce" | "spam_complaint" | "unsubscribe" | "manual";
+    }
+
+    const suppressions = await ctx.runQuery(api.queries.getSuppressions, args);
+
+    return new Response(
+      JSON.stringify(suppressions),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+  })
+});
+
 // Unsubscribe page handler (PRD Section 10)
 http.route({
   pathPrefix: "/u/",
