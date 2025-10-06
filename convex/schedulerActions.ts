@@ -41,8 +41,9 @@ function getNext9AM(): number {
 }
 
 function generateUnsubscribeUrl(enrollmentId: string): string {
-  // TODO: Replace with actual unsubscribe URL from your domain
-  return `https://app.gtmos.dev/unsubscribe/${enrollmentId}`;
+  // Use deployment URL
+  const deploymentUrl = process.env.CONVEX_SITE_URL || "https://focused-bloodhound-276.convex.site";
+  return `${deploymentUrl}/u/${enrollmentId}`;
 }
 
 function getResendKey(account: any, systemDefault: string | null): string {

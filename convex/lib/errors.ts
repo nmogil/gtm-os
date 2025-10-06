@@ -12,7 +12,9 @@ export type ErrorCode =
   | "invalid_email"
   | "invalid_request"
   | "invalid_resend_key"
-  | "enrollment_failed";
+  | "enrollment_failed"
+  | "event_not_found"
+  | "invalid_event_type";
 
 export class APIError extends Error {
   constructor(

@@ -1,8 +1,10 @@
 import { httpRouter } from "convex/server";
+import { httpAction } from "./_generated/server";
 import { authenticatedAction } from "./lib/httpAuth";
 import { errorResponse } from "./lib/errors";
 import { api, internal } from "./_generated/api";
 import { handleResendWebhook } from "./webhooks";
+import { Id } from "./_generated/dataModel";
 
 /**
  * HTTP endpoints for GTM OS
@@ -148,6 +150,158 @@ http.route({
         headers: { "Content-Type": "application/json" }
       }
     );
+  })
+});
+
+// Events endpoint (PRD Section 3.1)
+http.route({
+  path: "/events",
+  method: "POST",
+  handler: authenticatedAction(async (ctx, request, account) => {
+    const body = await request.json();
+
+    // Validate input
+    if (!body.type || !body.contact_email) {
+      return errorResponse(
+        "invalid_request",
+        "Missing required fields: type and contact_email",
+        {},
+        400
+      );
+    }
+
+    // Validate event type
+    const validTypes = ["conversion", "unsubscribe", "open", "click", "custom"];
+    if (!validTypes.includes(body.type)) {
+      return errorResponse(
+        "invalid_event_type",
+        `Invalid event type. Must be one of: ${validTypes.join(", ")}`,
+        { provided: body.type },
+        400
+      );
+    }
+
+    try {
+      const result = await ctx.runMutation(api.mutations.recordEvent, {
+        account_id: account._id,
+        type: body.type,
+        contact_email: body.contact_email,
+        journey_id: body.journey_id,
+        enrollment_id: body.enrollment_id,
+        metadata: body.metadata
+      });
+
+      return new Response(
+        JSON.stringify({
+          event_id: result.event_id,
+          accepted: true
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+    } catch (error: any) {
+      console.error("Event recording error:", error);
+      return errorResponse(
+        "invalid_request",
+        error.message || "Failed to record event",
+        {},
+        400
+      );
+    }
+  })
+});
+
+// Unsubscribe page handler (PRD Section 10)
+http.route({
+  pathPrefix: "/u/",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split("/").filter(p => p);
+    const enrollmentId = pathParts[pathParts.length - 1];
+
+    // Validate enrollment_id format
+    if (!enrollmentId || enrollmentId.length === 0) {
+      return new Response(
+        "<html><body><h1>Invalid Unsubscribe Link</h1><p>The link you clicked is invalid.</p></body></html>",
+        {
+          status: 404,
+          headers: { "Content-Type": "text/html" }
+        }
+      );
+    }
+
+    // Get enrollment (with try/catch for invalid ID format)
+    let enrollment;
+    try {
+      enrollment = await ctx.runQuery(api.queries.getEnrollment, {
+        enrollment_id: enrollmentId as Id<"enrollments">
+      });
+    } catch (error) {
+      // Invalid enrollment ID format
+      return new Response(
+        "<html><body><h1>Invalid Unsubscribe Link</h1><p>This unsubscribe link is not valid.</p></body></html>",
+        {
+          status: 404,
+          headers: { "Content-Type": "text/html" }
+        }
+      );
+    }
+
+    if (!enrollment) {
+      return new Response(
+        "<html><body><h1>Invalid Unsubscribe Link</h1><p>This unsubscribe link is not valid or has expired.</p></body></html>",
+        {
+          status: 404,
+          headers: { "Content-Type": "text/html" }
+        }
+      );
+    }
+
+    // Record unsubscribe event
+    try {
+      await ctx.runMutation(api.mutations.recordEvent, {
+        account_id: enrollment.account_id,
+        type: "unsubscribe",
+        contact_email: enrollment.contact_email,
+        journey_id: enrollment.journey_id,
+        enrollment_id: enrollmentId as Id<"enrollments">,
+        metadata: { source: "unsubscribe_link" }
+      });
+
+      return new Response(
+        `<html>
+          <head>
+            <title>Unsubscribed</title>
+            <style>
+              body { font-family: system-ui, sans-serif; max-width: 600px; margin: 100px auto; text-align: center; }
+              h1 { color: #333; }
+              p { color: #666; line-height: 1.6; }
+            </style>
+          </head>
+          <body>
+            <h1>You have been unsubscribed</h1>
+            <p>You will no longer receive emails from this journey.</p>
+            <p>Email: <strong>${enrollment.contact_email}</strong></p>
+          </body>
+        </html>`,
+        {
+          status: 200,
+          headers: { "Content-Type": "text/html" }
+        }
+      );
+    } catch (error: any) {
+      console.error("Unsubscribe error:", error);
+      return new Response(
+        "<html><body><h1>Error</h1><p>There was an error processing your unsubscribe request. Please try again.</p></body></html>",
+        {
+          status: 500,
+          headers: { "Content-Type": "text/html" }
+        }
+      );
+    }
   })
 });
 

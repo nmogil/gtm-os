@@ -4,6 +4,7 @@ import { validateJourneyTemplates } from "./lib/templates";
 import { APIError } from "./lib/errors";
 import { createEnrollmentIdempotent } from "./lib/idempotency";
 import { validateEmail } from "./lib/validation";
+import { Id } from "./_generated/dataModel";
 
 export const storeEncryptedResendApiKey = mutation({
   args: {
@@ -498,6 +499,165 @@ async function handleComplaint(ctx: any, webhookEvent: any, emailData: any) {
     await ctx.db.patch(enrollment._id, {
       status: "suppressed",
       last_error: "spam_complaint"
+    });
+  }
+}
+
+/**
+ * Record event and handle conversion/unsubscribe logic
+ * PRD Reference: Section 3.1 - POST /events
+ */
+export const recordEvent = mutation({
+  args: {
+    account_id: v.id("accounts"),
+    type: v.union(
+      v.literal("conversion"),
+      v.literal("unsubscribe"),
+      v.literal("open"),
+      v.literal("click"),
+      v.literal("custom")
+    ),
+    contact_email: v.string(),
+    journey_id: v.optional(v.id("journeys")),
+    enrollment_id: v.optional(v.id("enrollments")),
+    metadata: v.optional(v.any())
+  },
+  returns: v.object({
+    event_id: v.id("events"),
+    accepted: v.boolean()
+  }),
+  handler: async (ctx, args) => {
+    // Record event
+    const eventId = await ctx.db.insert("events", {
+      account_id: args.account_id,
+      contact_email: args.contact_email,
+      enrollment_id: args.enrollment_id,
+      journey_id: args.journey_id,
+      event_type: args.type,
+      metadata: args.metadata,
+      timestamp: Date.now()
+    });
+
+    // Handle conversion
+    if (args.type === "conversion") {
+      await handleConversionMutation(
+        ctx,
+        args.contact_email,
+        args.journey_id,
+        args.account_id
+      );
+    }
+
+    // Handle unsubscribe
+    if (args.type === "unsubscribe") {
+      await handleUnsubscribeMutation(
+        ctx,
+        args.account_id,
+        args.contact_email,
+        args.journey_id
+      );
+    }
+
+    return { event_id: eventId, accepted: true };
+  }
+});
+
+/**
+ * Helper: Handle conversion logic
+ */
+async function handleConversionMutation(
+  ctx: any,
+  contactEmail: string,
+  journeyId: Id<"journeys"> | undefined,
+  accountId: Id<"accounts">
+) {
+  // Build query for active enrollments
+  const query = ctx.db
+    .query("enrollments")
+    .filter((q: any) =>
+      q.and(
+        q.eq(q.field("account_id"), accountId),
+        q.eq(q.field("contact_email"), contactEmail),
+        q.eq(q.field("status"), "active")
+      )
+    );
+
+  // If journey_id specified, only stop enrollments in that journey
+  let enrollments;
+  if (journeyId) {
+    enrollments = await query
+      .filter((q: any) => q.eq(q.field("journey_id"), journeyId))
+      .collect();
+  } else {
+    enrollments = await query.collect();
+  }
+
+  // Stop all matching active enrollments
+  for (const enrollment of enrollments) {
+    await ctx.db.patch(enrollment._id, {
+      status: "converted"
+    });
+  }
+
+  // Update journey stats if journey specified
+  if (journeyId) {
+    const journey = await ctx.db.get(journeyId);
+    if (journey) {
+      await ctx.db.patch(journeyId, {
+        stats: {
+          ...journey.stats,
+          total_converted: journey.stats.total_converted + 1
+        }
+      });
+    }
+  }
+}
+
+/**
+ * Helper: Handle unsubscribe logic
+ */
+async function handleUnsubscribeMutation(
+  ctx: any,
+  accountId: Id<"accounts">,
+  contactEmail: string,
+  journeyId: Id<"journeys"> | undefined
+) {
+  // Add to suppression list
+  await ctx.db.insert("suppressions", {
+    account_id: accountId,
+    journey_id: journeyId, // undefined = global suppression
+    contact_email: contactEmail,
+    reason: "unsubscribe",
+    metadata: { source: "api" },
+    created_at: Date.now()
+  });
+
+  // Build query for active enrollments
+  const query = ctx.db
+    .query("enrollments")
+    .filter((q: any) =>
+      q.and(
+        q.eq(q.field("account_id"), accountId),
+        q.eq(q.field("contact_email"), contactEmail),
+        q.eq(q.field("status"), "active")
+      )
+    );
+
+  // If journey_id specified, only stop enrollments in that journey
+  let enrollments;
+  if (journeyId) {
+    enrollments = await query
+      .filter((q: any) => q.eq(q.field("journey_id"), journeyId))
+      .collect();
+  } else {
+    enrollments = await query.collect();
+  }
+
+  // Stop all matching enrollments
+  for (const enrollment of enrollments) {
+    await ctx.db.patch(enrollment._id, {
+      status: "removed",
+      last_error: "unsubscribed"
     });
   }
 }
