@@ -140,11 +140,47 @@ ENCRYPTION_KEY=
 
 ## Testing
 
-Test files in root directory:
-- `test-templates.ts`: Tests Handlebars template rendering and validation
-- `test-journeys-endpoint.ts`: Tests POST /journeys endpoint with curl
+Test files in `testing/` directory:
 
-Run with: `npx tsx <filename>`
+### Endpoint Tests
+- `test-journeys-endpoint.ts`: Tests POST /journeys endpoint
+- `test-enrollments-endpoint.ts`: Tests POST /enrollments endpoint
+- `test-health-endpoint.ts`: Tests GET /health endpoint and monitoring metrics
+- `test-metrics-collection.ts`: Tests metrics collection accuracy and calculations
+- `test-health-performance.ts`: Performance/load testing for health endpoint
+
+### System Tests
+- `test-templates.ts`: Tests Handlebars template rendering and validation
+- `test-scheduler.ts`: Tests message scheduling and sending
+- `test-resend-validation.ts`: Tests Resend API key validation
+- `test-fresh-enrollment.ts`: End-to-end enrollment and sending test
+
+### Utilities
+- `cleanup-enrollments.ts`: Clean up test enrollments from database
+- `create-fast-test-journey.ts`: Create a journey with fast timing for testing
+
+Run with: `npx tsx testing/<filename>`
+
+### Health & Monitoring Tests (Issue #15)
+
+The health endpoint tests verify:
+- ✅ Health check returns correct structure and metrics
+- ✅ Active enrollments count is accurate
+- ✅ Pending sends count reflects due enrollments
+- ✅ Error rate calculation is correct
+- ✅ Failed enrollments tracking works
+- ✅ Webhook processing lag is detected
+- ✅ Authentication is required
+- ✅ Response time is under 500ms
+
+Run health endpoint tests:
+```bash
+npx tsx testing/test-health-endpoint.ts        # Basic functionality (9 tests)
+npx tsx testing/test-metrics-collection.ts     # Metrics accuracy (9 tests)
+npx tsx testing/test-health-performance.ts     # Performance under load (5 tests)
+```
+
+**Note:** Performance tests create 1000+ test enrollments and may take several minutes to complete.
 
 ## Common Patterns
 
