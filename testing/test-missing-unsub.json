@@ -1,0 +1,10 @@
+{
+  "name": "No Unsub Journey",
+  "stages": [
+    {
+      "day": 0,
+      "subject": "Test",
+      "body": "No unsubscribe link here"
+    }
+  ]
+}

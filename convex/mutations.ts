@@ -51,6 +51,7 @@ export const createJourneyFromGenerated = mutation({
     const journeyId = await ctx.db.insert("journeys", {
       account_id: args.account_id,
       name: args.journey.name,
+      version: 1,
       goal: args.goal,
       audience: args.audience,
       stages: args.journey.stages,
@@ -69,6 +70,297 @@ export const createJourneyFromGenerated = mutation({
     });
 
     return { journeyId };
+  }
+});
+
+/**
+ * Create journey with manual/custom stages (no AI generation)
+ */
+export const createManualJourney = mutation({
+  args: {
+    account_id: v.id("accounts"),
+    name: v.string(),
+    goal: v.optional(v.string()),
+    audience: v.optional(v.string()),
+    stages: v.array(v.object({
+      day: v.number(),
+      subject: v.string(),
+      body: v.string()
+    })),
+    default_reply_to: v.optional(v.string()),
+    default_tags: v.optional(v.any())
+  },
+  returns: v.object({
+    journeyId: v.id("journeys")
+  }),
+  handler: async (ctx, args) => {
+    // Validate stages array is not empty
+    if (args.stages.length === 0) {
+      throw new APIError(
+        "invalid_request",
+        "Journey must have at least one stage",
+        {},
+        400
+      );
+    }
+
+    // Validate day ordering (must be >= 0 and in ascending order)
+    for (let i = 0; i < args.stages.length; i++) {
+      if (args.stages[i].day < 0) {
+        throw new APIError(
+          "invalid_request",
+          `Stage ${i + 1}: day must be >= 0`,
+          { stage: i, day: args.stages[i].day },
+          400
+        );
+      }
+      if (i > 0 && args.stages[i].day <= args.stages[i - 1].day) {
+        throw new APIError(
+          "invalid_request",
+          `Stage ${i + 1}: days must be in ascending order`,
+          { stage: i, day: args.stages[i].day, previous_day: args.stages[i - 1].day },
+          400
+        );
+      }
+    }
+
+    // Validate templates using existing validation
+    const validation = validateJourneyTemplates(args.stages);
+    if (!validation.valid) {
+      throw new APIError(
+        "invalid_templates",
+        "Journey has invalid templates",
+        { errors: validation.errors },
+        400
+      );
+    }
+
+    // Create journey record
+    const journeyId = await ctx.db.insert("journeys", {
+      account_id: args.account_id,
+      name: args.name,
+      version: 1,
+      goal: args.goal || "",
+      audience: args.audience || "",
+      stages: args.stages,
+      is_active: true,
+      default_reply_to: args.default_reply_to,
+      default_tags: args.default_tags,
+      stats: {
+        total_enrolled: 0,
+        total_completed: 0,
+        total_converted: 0,
+        total_bounced: 0,
+        total_complained: 0,
+        open_rate: 0,
+        click_rate: 0
+      },
+      created_at: Date.now()
+    });
+
+    return { journeyId };
+  }
+});
+
+/**
+ * Update existing journey with versioning support
+ * Supports both full and partial stage updates
+ */
+export const updateJourney = mutation({
+  args: {
+    account_id: v.id("accounts"),
+    journey_id: v.id("journeys"),
+    name: v.optional(v.string()),
+    goal: v.optional(v.string()),
+    audience: v.optional(v.string()),
+    stages: v.optional(v.array(v.object({
+      day: v.number(),
+      subject: v.string(),
+      body: v.string()
+    }))),
+    stage_updates: v.optional(v.array(v.object({
+      index: v.optional(v.number()),
+      day: v.optional(v.number()),
+      subject: v.optional(v.string()),
+      body: v.optional(v.string())
+    }))),
+    is_active: v.optional(v.boolean()),
+    default_reply_to: v.optional(v.string()),
+    default_tags: v.optional(v.any())
+  },
+  returns: v.object({
+    success: v.boolean(),
+    version: v.number()
+  }),
+  handler: async (ctx, args) => {
+    // Get journey and verify ownership
+    const journey = await ctx.db.get(args.journey_id);
+    if (!journey) {
+      throw new APIError(
+        "journey_not_found",
+        "Journey not found",
+        {},
+        404
+      );
+    }
+
+    if (journey.account_id !== args.account_id) {
+      throw new APIError(
+        "unauthorized",
+        "You don't have access to this journey",
+        {},
+        403
+      );
+    }
+
+    // Check for conflicting stage update methods
+    if (args.stages && args.stage_updates) {
+      throw new APIError(
+        "invalid_request",
+        "Cannot use both 'stages' (full replacement) and 'stage_updates' (partial) in same request",
+        {},
+        400
+      );
+    }
+
+    // Build update object
+    const updates: any = {};
+    let stagesChanged = false;
+
+    // Handle metadata updates (don't change version)
+    if (args.name !== undefined) updates.name = args.name;
+    if (args.goal !== undefined) updates.goal = args.goal;
+    if (args.audience !== undefined) updates.audience = args.audience;
+    if (args.is_active !== undefined) updates.is_active = args.is_active;
+    if (args.default_reply_to !== undefined) updates.default_reply_to = args.default_reply_to;
+    if (args.default_tags !== undefined) updates.default_tags = args.default_tags;
+
+    // Handle full stage replacement
+    if (args.stages) {
+      if (args.stages.length === 0) {
+        throw new APIError(
+          "invalid_request",
+          "Journey must have at least one stage",
+          {},
+          400
+        );
+      }
+
+      // Validate day ordering
+      for (let i = 0; i < args.stages.length; i++) {
+        if (args.stages[i].day < 0) {
+          throw new APIError(
+            "invalid_request",
+            `Stage ${i + 1}: day must be >= 0`,
+            { stage: i, day: args.stages[i].day },
+            400
+          );
+        }
+        if (i > 0 && args.stages[i].day <= args.stages[i - 1].day) {
+          throw new APIError(
+            "invalid_request",
+            `Stage ${i + 1}: days must be in ascending order`,
+            { stage: i, day: args.stages[i].day, previous_day: args.stages[i - 1].day },
+            400
+          );
+        }
+      }
+
+      // Validate templates
+      const validation = validateJourneyTemplates(args.stages);
+      if (!validation.valid) {
+        throw new APIError(
+          "invalid_templates",
+          "Journey has invalid templates",
+          { errors: validation.errors },
+          400
+        );
+      }
+
+      updates.stages = args.stages;
+      stagesChanged = true;
+    }
+
+    // Handle partial stage updates
+    if (args.stage_updates) {
+      const updatedStages = [...journey.stages];
+
+      for (const update of args.stage_updates) {
+        let stageIndex: number;
+
+        // Find stage by index or day
+        if (update.index !== undefined) {
+          stageIndex = update.index;
+        } else if (update.day !== undefined) {
+          stageIndex = updatedStages.findIndex(s => s.day === update.day);
+          if (stageIndex === -1) {
+            throw new APIError(
+              "invalid_request",
+              `No stage found with day ${update.day}`,
+              { day: update.day },
+              400
+            );
+          }
+        } else {
+          throw new APIError(
+            "invalid_request",
+            "Each stage_update must have either 'index' or 'day'",
+            {},
+            400
+          );
+        }
+
+        // Validate index
+        if (stageIndex < 0 || stageIndex >= updatedStages.length) {
+          throw new APIError(
+            "invalid_request",
+            `Stage index ${stageIndex} out of bounds (0-${updatedStages.length - 1})`,
+            { index: stageIndex },
+            400
+          );
+        }
+
+        // Apply partial update
+        if (update.subject !== undefined) {
+          updatedStages[stageIndex].subject = update.subject;
+        }
+        if (update.body !== undefined) {
+          updatedStages[stageIndex].body = update.body;
+        }
+      }
+
+      // Validate updated templates
+      const validation = validateJourneyTemplates(updatedStages);
+      if (!validation.valid) {
+        throw new APIError(
+          "invalid_templates",
+          "Updated journey has invalid templates",
+          { errors: validation.errors },
+          400
+        );
+      }
+
+      updates.stages = updatedStages;
+      stagesChanged = true;
+    }
+
+    // Increment version if stages changed
+    if (stagesChanged) {
+      updates.version = journey.version + 1;
+    }
+
+    // Always update timestamp if any changes
+    if (Object.keys(updates).length > 0) {
+      updates.updated_at = Date.now();
+    }
+
+    // Update journey
+    await ctx.db.patch(args.journey_id, updates);
+
+    return {
+      success: true,
+      version: stagesChanged ? journey.version + 1 : journey.version
+    };
   }
 });
 

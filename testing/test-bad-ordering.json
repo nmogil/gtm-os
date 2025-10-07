@@ -1,0 +1,15 @@
+{
+  "name": "Bad Order Journey",
+  "stages": [
+    {
+      "day": 3,
+      "subject": "Test",
+      "body": "Test {{unsubscribe_url}}"
+    },
+    {
+      "day": 1,
+      "subject": "Test",
+      "body": "Test {{unsubscribe_url}}"
+    }
+  ]
+}

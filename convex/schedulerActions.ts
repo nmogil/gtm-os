@@ -139,7 +139,7 @@ export const processBatchAction = internalAction({
       }
 
       // Check if stage exists
-      if (enrollment.current_stage >= journey.stages.length) {
+      if (enrollment.current_stage >= enrollment.stages_snapshot.length) {
         await ctx.runMutation(internal.scheduler.markEnrollmentCompleted, {
           enrollmentId: enrollment._id,
           reason: "all_stages_complete"
@@ -147,7 +147,7 @@ export const processBatchAction = internalAction({
         continue;
       }
 
-      const stage = journey.stages[enrollment.current_stage];
+      const stage = enrollment.stages_snapshot[enrollment.current_stage];
 
       // Check send window (PRD Section 5.2) - skip if test_mode is true
       if (!enrollment.test_mode && !isWithinSendWindow(now)) {

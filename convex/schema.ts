@@ -24,6 +24,7 @@ export default defineSchema({
   journeys: defineTable({
     account_id: v.id("accounts"),
     name: v.string(),
+    version: v.optional(v.number()),
     goal: v.string(),
     audience: v.string(),
     stages: v.array(v.object({
@@ -43,12 +44,19 @@ export default defineSchema({
       open_rate: v.number(),
       click_rate: v.number()
     }),
-    created_at: v.number()
+    created_at: v.number(),
+    updated_at: v.optional(v.number())
   }).index("by_account", ["account_id"]),
 
   enrollments: defineTable({
     account_id: v.id("accounts"),
     journey_id: v.id("journeys"),
+    journey_version: v.optional(v.number()),
+    stages_snapshot: v.optional(v.array(v.object({
+      day: v.number(),
+      subject: v.string(),
+      body: v.string()
+    }))),
     contact_email: v.string(),
     contact_data: v.any(),
     status: v.union(

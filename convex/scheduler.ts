@@ -271,17 +271,14 @@ export const recordMessageSent = internalMutation({
     const enrollment = await ctx.db.get(args.enrollmentId);
     if (!enrollment) return null;
 
-    const journey = await ctx.db.get(args.journeyId);
-    if (!journey) return null;
-
-    const isLastStage = args.stage >= journey.stages.length - 1;
+    const isLastStage = args.stage >= enrollment.stages_snapshot.length - 1;
 
     await ctx.db.patch(args.enrollmentId, {
       status: isLastStage ? "completed" : "active",
       current_stage: args.stage + 1,
       next_run_at: isLastStage
         ? Date.now()
-        : Date.now() + getDayOffset(journey.stages[args.stage + 1].day - journey.stages[args.stage].day)
+        : Date.now() + getDayOffset(enrollment.stages_snapshot[args.stage + 1].day - enrollment.stages_snapshot[args.stage].day)
     });
 
     return null;

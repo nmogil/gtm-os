@@ -55,10 +55,29 @@ export async function createEnrollmentIdempotent(
     return { enrollment: duplicate, existing: true };
   }
 
+  // Fetch journey to get current version and stages
+  const journey = await ctx.db.get(args.journey_id);
+  if (!journey) {
+    const { APIError } = require("./errors");
+    throw new APIError("journey_not_found", "Journey not found", {}, 404);
+  }
+
+  if (!journey.is_active) {
+    const { APIError } = require("./errors");
+    throw new APIError(
+      "journey_inactive",
+      "Cannot enroll in inactive journey",
+      {},
+      400
+    );
+  }
+
   // Create new enrollment
   const enrollmentId = await ctx.db.insert("enrollments", {
     account_id: args.account_id,
     journey_id: args.journey_id,
+    journey_version: journey.version,
+    stages_snapshot: journey.stages,
     contact_email: args.contact_email,
     contact_data: args.contact_data,
     status: "active",

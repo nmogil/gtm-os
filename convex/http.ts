@@ -59,52 +59,117 @@ http.route({
 });
 
 // Create journey endpoint (PRD Section 3.1, 9.1)
+// Supports both AI-generated and manual journey creation
 http.route({
   path: "/journeys",
   method: "POST",
   handler: authenticatedAction(async (ctx, request, account) => {
     const body = await request.json();
 
-    // Validate input
-    if (!body.goal || !body.audience) {
-      return errorResponse(
-        "journey_not_found",
-        "Missing required fields: goal and audience",
-        {},
-        400
+    // Detect mode: if 'stages' is provided -> manual mode, else -> AI mode
+    const isManualMode = body.stages && Array.isArray(body.stages);
+
+    if (isManualMode) {
+      // Manual journey creation
+      if (!body.name) {
+        return errorResponse(
+          "invalid_request",
+          "Missing required field: name",
+          {},
+          400
+        );
+      }
+
+      if (!body.stages || body.stages.length === 0) {
+        return errorResponse(
+          "invalid_request",
+          "Missing required field: stages (must be non-empty array)",
+          {},
+          400
+        );
+      }
+
+      // Create manual journey (via mutation)
+      let result;
+      try {
+        result = await ctx.runMutation(api.mutations.createManualJourney, {
+          account_id: account._id,
+          name: body.name,
+          goal: body.goal,
+          audience: body.audience,
+          stages: body.stages,
+          default_reply_to: body.options?.default_reply_to,
+          default_tags: body.options?.default_tags
+        });
+      } catch (error: any) {
+        // Handle APIError from mutation
+        console.error("Manual journey creation error:", error);
+
+        // Convex wraps errors, check both error.data and direct properties
+        const errorData = error.data || error;
+        const code = errorData.code || "invalid_request";
+        const message = errorData.message || error.message || "Failed to create journey";
+        const details = errorData.details || {};
+        const statusCode = errorData.statusCode || 400;
+
+        return errorResponse(code, message, details, statusCode);
+      }
+
+      return new Response(
+        JSON.stringify({
+          journey_id: result.journeyId,
+          name: body.name,
+          mode: "manual",
+          stages: body.stages
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+    } else {
+      // AI-generated journey (existing logic)
+      if (!body.goal || !body.audience) {
+        return errorResponse(
+          "invalid_request",
+          "Missing required fields: goal and audience",
+          {},
+          400
+        );
+      }
+
+      const emailCount = body.options?.emails || 5;
+
+      // Generate journey with AI (via action)
+      const { journey, usedFallback } = await ctx.runAction(api.actions.generateJourneyAction, {
+        goal: body.goal,
+        audience: body.audience,
+        emailCount: emailCount
+      });
+
+      // Create journey record (via mutation)
+      const result = await ctx.runMutation(api.mutations.createJourneyFromGenerated, {
+        account_id: account._id,
+        goal: body.goal,
+        audience: body.audience,
+        journey: journey,
+        default_reply_to: body.options?.default_reply_to
+      });
+
+      return new Response(
+        JSON.stringify({
+          journey_id: result.journeyId,
+          name: journey.name,
+          mode: "ai",
+          default_reply_to: body.options?.default_reply_to,
+          stages: journey.stages
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }
       );
     }
-
-    const emailCount = body.options?.emails || 5;
-
-    // Generate journey with AI (via action)
-    const { journey, usedFallback } = await ctx.runAction(api.actions.generateJourneyAction, {
-      goal: body.goal,
-      audience: body.audience,
-      emailCount: emailCount
-    });
-
-    // Create journey record (via mutation)
-    const result = await ctx.runMutation(api.mutations.createJourneyFromGenerated, {
-      account_id: account._id,
-      goal: body.goal,
-      audience: body.audience,
-      journey: journey,
-      default_reply_to: body.options?.default_reply_to
-    });
-
-    return new Response(
-      JSON.stringify({
-        journey_id: result.journeyId,
-        name: journey.name,
-        default_reply_to: body.options?.default_reply_to,
-        stages: journey.stages
-      }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" }
-      }
-    );
   })
 });
 
@@ -187,6 +252,164 @@ http.route({
   })
 });
 
+// Get and update journey endpoints: /journeys/:id and /journeys/:id/analytics (Issue #26, #27)
+http.route({
+  pathPrefix: "/journeys/",
+  method: "GET",
+  handler: authenticatedAction(async (ctx, request, account) => {
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split("/").filter(p => p);
+
+    // Handle GET /journeys/:id/analytics (pathParts.length === 3)
+    if (pathParts.length === 3 && pathParts[2] === "analytics") {
+      const journeyId = pathParts[1];
+
+      // Get analytics
+      const analytics = await ctx.runQuery(api.queries.getJourneyAnalytics, {
+        journey_id: journeyId as Id<"journeys">,
+        account_id: account._id
+      }).catch(() => null);
+
+      if (!analytics) {
+        return errorResponse(
+          "journey_not_found",
+          "Journey not found",
+          {},
+          404
+        );
+      }
+
+      return new Response(
+        JSON.stringify(analytics),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+    }
+
+    // Handle GET /journeys/:id (pathParts.length === 2)
+    if (pathParts.length !== 2) {
+      return new Response("Not Found", { status: 404 });
+    }
+
+    const journeyId = pathParts[1];
+
+    // Validate journey ID format (starts with 'jd')
+    if (!journeyId.startsWith("jd")) {
+      return errorResponse(
+        "invalid_request",
+        "Invalid journey ID format",
+        {},
+        400
+      );
+    }
+
+    // Get journey
+    const journey = await ctx.runQuery(api.queries.getJourneyById, {
+      journey_id: journeyId as Id<"journeys">,
+      account_id: account._id
+    }).catch(() => null);
+
+    if (!journey) {
+      return errorResponse(
+        "journey_not_found",
+        "Journey not found",
+        {},
+        404
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        journey_id: journey._id,
+        name: journey.name,
+        version: journey.version || 1,
+        goal: journey.goal,
+        audience: journey.audience,
+        stages: journey.stages,
+        is_active: journey.is_active,
+        default_reply_to: journey.default_reply_to,
+        default_tags: journey.default_tags,
+        stats: journey.stats,
+        created_at: new Date(journey.created_at).toISOString(),
+        updated_at: journey.updated_at ? new Date(journey.updated_at).toISOString() : undefined
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+  })
+});
+
+http.route({
+  pathPrefix: "/journeys/",
+  method: "PATCH",
+  handler: authenticatedAction(async (ctx, request, account) => {
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split("/").filter(p => p);
+
+    // Handle PATCH /journeys/:id
+    if (pathParts.length !== 2) {
+      return new Response("Not Found", { status: 404 });
+    }
+
+    const journeyId = pathParts[1];
+
+    // Validate journey ID format
+    if (!journeyId.startsWith("jd")) {
+      return errorResponse(
+        "invalid_request",
+        "Invalid journey ID format",
+        {},
+        400
+      );
+    }
+
+    const body = await request.json();
+
+    // Update journey
+    let result;
+    try {
+      result = await ctx.runMutation(api.mutations.updateJourney, {
+        account_id: account._id,
+        journey_id: journeyId as Id<"journeys">,
+        name: body.name,
+        goal: body.goal,
+        audience: body.audience,
+        stages: body.stages,
+        stage_updates: body.stage_updates,
+        is_active: body.is_active,
+        default_reply_to: body.default_reply_to,
+        default_tags: body.default_tags
+      });
+    } catch (error: any) {
+      console.error("Journey update error:", error);
+
+      const errorData = error.data || error;
+      const code = errorData.code || "update_failed";
+      const message = errorData.message || error.message || "Failed to update journey";
+      const details = errorData.details || {};
+      const statusCode = errorData.statusCode || 400;
+
+      return errorResponse(code, message, details, statusCode);
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        journey_id: journeyId,
+        version: result.version
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+  })
+});
+
 // Events endpoint (PRD Section 3.1)
 http.route({
   path: "/events",
@@ -244,46 +467,6 @@ http.route({
         400
       );
     }
-  })
-});
-
-// Journey analytics endpoint (PRD Section 3.1, 9.4)
-http.route({
-  pathPrefix: "/journeys/",
-  method: "GET",
-  handler: authenticatedAction(async (ctx, request, account) => {
-    const url = new URL(request.url);
-    const pathParts = url.pathname.split("/").filter(p => p);
-
-    // Check if this is the analytics endpoint: /journeys/:id/analytics
-    if (pathParts.length !== 3 || pathParts[2] !== "analytics") {
-      return new Response("Not Found", { status: 404 });
-    }
-
-    const journeyId = pathParts[1];
-
-    // Get analytics
-    const analytics = await ctx.runQuery(api.queries.getJourneyAnalytics, {
-      journey_id: journeyId as Id<"journeys">,
-      account_id: account._id
-    }).catch(() => null);
-
-    if (!analytics) {
-      return errorResponse(
-        "journey_not_found",
-        "Journey not found",
-        {},
-        404
-      );
-    }
-
-    return new Response(
-      JSON.stringify(analytics),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" }
-      }
-    );
   })
 });
 

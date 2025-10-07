@@ -1,0 +1,25 @@
+{
+  "name": "Manual Test Journey",
+  "stages": [
+    {
+      "day": 0,
+      "subject": "Welcome to GTM OS",
+      "body": "Hi {{name}}, welcome! {{unsubscribe_url}}"
+    },
+    {
+      "day": 3,
+      "subject": "How are things going?",
+      "body": "Hey {{name}}, checking in. {{unsubscribe_url}}"
+    },
+    {
+      "day": 7,
+      "subject": "Week 1 Complete",
+      "body": "Hi {{name}}, congrats on week 1! {{unsubscribe_url}}"
+    }
+  ],
+  "goal": "Onboarding",
+  "audience": "New users",
+  "options": {
+    "default_reply_to": "support@example.com"
+  }
+}

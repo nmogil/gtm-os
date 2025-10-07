@@ -1,0 +1,9 @@
+{
+  "stages": [
+    {
+      "day": 0,
+      "subject": "Test",
+      "body": "Test {{unsubscribe_url}}"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "Negative Day Journey",
+  "stages": [
+    {
+      "day": -1,
+      "subject": "Test",
+      "body": "Test {{unsubscribe_url}}"
+    }
+  ]
+}

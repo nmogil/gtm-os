@@ -1,0 +1,7 @@
+{
+  "goal": "Test backward compatibility",
+  "audience": "Test users",
+  "options": {
+    "emails": 5
+  }
+}

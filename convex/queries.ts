@@ -1,4 +1,4 @@
-import { query } from "./_generated/server";
+import { query, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
 export const getAccountByApiKey = query({
@@ -497,6 +497,221 @@ export const getErrorMetrics = query({
       error_rate,
       failed_24h: failedEnrollments.length,
       webhook_lag: unprocessedWebhooks.length
+    };
+  }
+});
+
+/**
+ * Get journey by ID with account authorization check
+ * Used by GET /journeys/:id endpoint (Issue #26)
+ */
+export const getJourneyById = query({
+  args: {
+    journey_id: v.id("journeys"),
+    account_id: v.id("accounts")
+  },
+  returns: v.union(
+    v.object({
+      _id: v.id("journeys"),
+      _creationTime: v.number(),
+      account_id: v.id("accounts"),
+      name: v.string(),
+      goal: v.string(),
+      audience: v.string(),
+      stages: v.array(v.object({
+        day: v.number(),
+        subject: v.string(),
+        body: v.string()
+      })),
+      is_active: v.boolean(),
+      default_reply_to: v.optional(v.string()),
+      default_tags: v.optional(v.any()),
+      stats: v.object({
+        total_enrolled: v.number(),
+        total_completed: v.number(),
+        total_converted: v.number(),
+        total_bounced: v.number(),
+        total_complained: v.number(),
+        open_rate: v.number(),
+        click_rate: v.number()
+      }),
+      created_at: v.number()
+    }),
+    v.null()
+  ),
+  handler: async (ctx, args) => {
+    const journey = await ctx.db.get(args.journey_id);
+
+    // Return null if not found
+    if (!journey) {
+      return null;
+    }
+
+    // Check authorization - journey must belong to the account
+    if (journey.account_id !== args.account_id) {
+      return null;
+    }
+
+    // Calculate real-time stats by counting enrollments and messages
+    const enrollments = await ctx.db
+      .query("enrollments")
+      .withIndex("by_journey", (q) => q.eq("journey_id", args.journey_id))
+      .collect();
+
+    const total_enrolled = enrollments.length;
+    const total_completed = enrollments.filter((e) => e.status === "completed").length;
+    const total_converted = enrollments.filter((e) => e.status === "converted").length;
+
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_journey", (q) => q.eq("journey_id", args.journey_id))
+      .collect();
+
+    const sent = messages.filter((m) => m.status === "sent").length;
+    const delivered = messages.filter((m) => m.delivery_status === "delivered").length;
+    const total_bounced = messages.filter((m) => m.delivery_status === "bounced").length;
+    const total_complained = messages.filter((m) => m.delivery_status === "complained").length;
+
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_journey", (q) => q.eq("journey_id", args.journey_id))
+      .collect();
+
+    const opens = events.filter((e) => e.event_type === "open").length;
+    const clicks = events.filter((e) => e.event_type === "click").length;
+
+    const open_rate = delivered > 0 ? opens / delivered : 0;
+    const click_rate = delivered > 0 ? clicks / delivered : 0;
+
+    return {
+      ...journey,
+      stats: {
+        total_enrolled,
+        total_completed,
+        total_converted,
+        total_bounced,
+        total_complained,
+        open_rate,
+        click_rate
+      }
+    };
+  }
+});
+
+/**
+ * Collect comprehensive system metrics for monitoring
+ * PRD Reference: Section 11.2 - Critical Monitoring
+ * Moved from metrics.ts to avoid Node.js runtime conflicts (Issue #26 deployment blocker)
+ */
+export const collectMetrics = internalQuery({
+  args: {},
+  returns: v.any(),
+  handler: async (ctx) => {
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+
+    // Sending metrics
+    const messages = await ctx.db
+      .query("messages")
+      .filter((q) => q.gte(q.field("_creationTime"), oneDayAgo))
+      .collect();
+
+    const totalMessages = messages.length;
+    const sentMessages = messages.filter((m) => m.status === "sent").length;
+    const failedMessages = messages.filter((m) => m.status === "failed").length;
+    const send_success_rate = totalMessages > 0 ? sentMessages / totalMessages : 0;
+    const error_rate = totalMessages > 0 ? failedMessages / totalMessages : 0;
+
+    // Delivery metrics
+    const deliveredMessages = messages.filter((m) => m.delivery_status === "delivered").length;
+    const bouncedMessages = messages.filter((m) => m.delivery_status === "bounced").length;
+    const complainedMessages = messages.filter((m) => m.delivery_status === "complained").length;
+
+    const delivery_rate = sentMessages > 0 ? deliveredMessages / sentMessages : 0;
+    const bounce_rate = sentMessages > 0 ? bouncedMessages / sentMessages : 0;
+    const complaint_rate = sentMessages > 0 ? complainedMessages / sentMessages : 0;
+
+    // Events for engagement metrics
+    const events = await ctx.db
+      .query("events")
+      .filter((q) => q.gte(q.field("timestamp"), oneDayAgo))
+      .collect();
+
+    const opens = events.filter((e) => e.event_type === "open").length;
+    const clicks = events.filter((e) => e.event_type === "click").length;
+    const conversions = events.filter((e) => e.event_type === "conversion").length;
+
+    const open_rate = deliveredMessages > 0 ? opens / deliveredMessages : 0;
+    const click_rate = deliveredMessages > 0 ? clicks / deliveredMessages : 0;
+
+    // Enrollments for conversion rate
+    const enrollments = await ctx.db
+      .query("enrollments")
+      .filter((q) => q.gte(q.field("enrolled_at"), oneDayAgo))
+      .collect();
+
+    const totalEnrolled = enrollments.length;
+    const conversion_rate = totalEnrolled > 0 ? conversions / totalEnrolled : 0;
+
+    // Webhook metrics
+    const webhooks = await ctx.db
+      .query("webhook_events")
+      .filter((q) => q.gte(q.field("_creationTime"), oneDayAgo))
+      .collect();
+
+    const processedWebhooks = webhooks.filter((w) => w.processed).length;
+    const webhook_success_rate = webhooks.length > 0 ? processedWebhooks / webhooks.length : 0;
+
+    // Webhook lag (unprocessed events older than 1 minute)
+    const unprocessedWebhooks = await ctx.db
+      .query("webhook_events")
+      .withIndex("by_processed", (q) => q.eq("processed", false))
+      .filter((q) => q.lte(q.field("_creationTime"), Date.now() - 60000))
+      .collect();
+
+    const webhook_lag = unprocessedWebhooks.length;
+
+    // Suppression metrics
+    const suppressions = await ctx.db
+      .query("suppressions")
+      .filter((q) => q.gte(q.field("created_at"), oneDayAgo))
+      .collect();
+
+    const suppression_by_reason: Record<string, number> = {};
+    suppressions.forEach((s) => {
+      suppression_by_reason[s.reason] = (suppression_by_reason[s.reason] || 0) + 1;
+    });
+
+    const suppression_rate = totalMessages > 0 ? suppressions.length / totalMessages : 0;
+
+    // Active enrollments
+    const activeEnrollments = await ctx.db
+      .query("enrollments")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+
+    // Failed enrollments in last 24h
+    const failedEnrollments = await ctx.db
+      .query("enrollments")
+      .withIndex("by_status", (q) => q.eq("status", "failed"))
+      .filter((q) => q.gte(q.field("_creationTime"), oneDayAgo))
+      .collect();
+
+    return {
+      send_success_rate,
+      messages_sent_24h: sentMessages,
+      delivery_rate,
+      bounce_rate,
+      complaint_rate,
+      open_rate,
+      click_rate,
+      conversion_rate,
+      webhook_success_rate,
+      webhook_lag,
+      suppression_rate,
+      suppression_by_reason,
+      active_enrollments_count: activeEnrollments.length,
+      failed_enrollments_24h: failedEnrollments.length,
+      error_rate
     };
   }
 });

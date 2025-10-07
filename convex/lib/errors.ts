@@ -15,7 +15,8 @@ export type ErrorCode =
   | "enrollment_failed"
   | "enrollment_not_found"
   | "event_not_found"
-  | "invalid_event_type";
+  | "invalid_event_type"
+  | "invalid_templates";
 
 export class APIError extends Error {
   constructor(
