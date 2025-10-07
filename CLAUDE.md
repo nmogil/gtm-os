@@ -886,4 +886,86 @@ export default function App() {
 }
 ```
 
+# User Documentation
+
+GTM OS includes comprehensive user-facing documentation in the `docs/` directory:
+
+## Documentation Structure
+
+- **[README.md](../README.md)** - Developer-first quick start guide (10-minute setup)
+- **[docs/API.md](../docs/API.md)** - Complete API reference with all endpoints, request/response examples, error codes, and authentication
+- **[docs/EXAMPLES.md](../docs/EXAMPLES.md)** - Production-ready code examples in multiple languages (Node.js, Python, Bash)
+- **[docs/TEMPLATES.md](../docs/TEMPLATES.md)** - Handlebars templating guide with custom helpers and examples
+- **[docs/WEBHOOKS.md](../docs/WEBHOOKS.md)** - Resend webhook setup, event types, and troubleshooting
+- **[docs/TESTING.md](../docs/TESTING.md)** - Testing guide with test mode, utilities, and workflows
+
+## Key Documentation Features
+
+### API Reference (docs/API.md)
+- All 9 HTTP endpoints documented
+- Working curl examples for each endpoint
+- Request/response schemas
+- Error code reference
+- Rate limits and best practices
+- Node.js and Python SDK examples
+
+### Code Examples (docs/EXAMPLES.md)
+Eight production-ready recipes:
+1. Trial User Conversion Flow (complete workflow)
+2. Onboarding Sequence
+3. Re-engagement Campaign
+4. Product Launch Announcement
+5. Event-Driven Emails
+6. Batch Enrollment (1000+ users)
+7. Analytics Dashboard (React example)
+8. Idempotent Operations (retry logic)
+
+### Template Guide (docs/TEMPLATES.md)
+- Handlebars syntax reference
+- Three custom helpers: `default`, `uppercase`, `date_format`
+- Template context structure
+- Required variables (`{{unsubscribe_url}}`)
+- HTML escaping and security
+- Validation examples
+- Common pitfalls and solutions
+
+### Webhook Setup (docs/WEBHOOKS.md)
+- Step-by-step Resend webhook configuration
+- Six event types documented (sent, delivered, bounced, complained, opened, clicked)
+- Svix signature verification details
+- Processing flow and deduplication
+- Testing and troubleshooting guides
+
+### Testing Guide (docs/TESTING.md)
+- Test mode explanation and usage
+- Four testing utilities in `testing/` directory
+- Complete testing workflows
+- Cleanup procedures
+- Best practices for safe testing
+
+## When to Reference Documentation
+
+**Direct users to documentation for:**
+- Getting started (README.md Quick Start)
+- API endpoint details (docs/API.md)
+- Code examples in their language (docs/EXAMPLES.md)
+- Template syntax questions (docs/TEMPLATES.md)
+- Webhook setup (docs/WEBHOOKS.md)
+- Testing strategies (docs/TESTING.md)
+
+**Use CLAUDE.md for:**
+- Internal development guidance
+- Convex-specific patterns
+- Codebase architecture
+- Implementation details
+
+## Documentation Maintenance
+
+When updating code, check if related documentation needs updates:
+- New endpoints → Update docs/API.md
+- New template helpers → Update docs/TEMPLATES.md
+- New webhook events → Update docs/WEBHOOKS.md
+- New testing utilities → Update docs/TESTING.md
+- Architecture changes → Update README.md and CLAUDE.md
+
 
