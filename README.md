@@ -10,6 +10,8 @@ Contact support to get your GTM OS API key: `acct_xxxxx`
 
 ### 2. Create Your First Journey
 
+**Option 1: AI-Generated Journey**
+
 ```bash
 curl -X POST "https://focused-bloodhound-276.convex.site/journeys" \
   -H "X-API-Key: YOUR_API_KEY" \
@@ -24,19 +26,36 @@ curl -X POST "https://focused-bloodhound-276.convex.site/journeys" \
   }'
 ```
 
+**Option 2: Manual Journey (Custom Content)**
+
+```bash
+curl -X POST "https://focused-bloodhound-276.convex.site/journeys" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Welcome Series",
+    "stages": [
+      {
+        "day": 0,
+        "subject": "Welcome aboard!",
+        "body": "Hi {{name}}, welcome to our platform! {{unsubscribe_url}}"
+      },
+      {
+        "day": 3,
+        "subject": "Getting started tips",
+        "body": "Hey {{name}}, here are some tips... {{unsubscribe_url}}"
+      }
+    ]
+  }'
+```
+
 **Response:**
 ```json
 {
-  "journey_id": "jd7fg1fa3kq2dncmm05323g1td7rnxse",
-  "name": "Trial → Paid Conversion (B2B SaaS)",
-  "stages": [
-    {
-      "day": 0,
-      "subject": "Welcome to {{company}}, {{name}}!",
-      "body": "<p>Hi {{name}},</p>..."
-    },
-    ...
-  ]
+  "journey_id": "jd7abc...",
+  "name": "Welcome Series",
+  "mode": "manual",
+  "stages": [...]
 }
 ```
 
@@ -123,7 +142,9 @@ curl -X POST "https://focused-bloodhound-276.convex.site/events" \
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/health` | GET | System health & metrics |
-| `/journeys` | POST | Create AI-generated journey |
+| `/journeys` | POST | Create AI-generated or manual journey |
+| `/journeys/:id` | GET | Retrieve journey details |
+| `/journeys/:id` | PATCH | Update journey content or metadata |
 | `/enrollments` | POST | Enroll contact in journey |
 | `/events` | POST | Track conversion/unsubscribe/custom |
 | `/journeys/:id/analytics` | GET | Journey performance metrics |

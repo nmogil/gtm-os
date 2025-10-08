@@ -99,6 +99,49 @@ Two-level idempotency for enrollments and messages:
 
 **Usage**: Call `createEnrollmentIdempotent()` from `convex/lib/idempotency.ts`
 
+### Journey Versioning
+
+GTM OS uses a versioning system to ensure active enrollments are not disrupted by journey updates.
+
+**How It Works:**
+1. Each journey has a `version` field (starts at 1)
+2. When stages are updated, version increments
+3. Each enrollment stores:
+   - `journey_version`: Which version they enrolled with
+   - `stages_snapshot`: Copy of stages at enrollment time
+4. Enrollments always use their snapshot, never fetch from journey
+
+**Benefits:**
+- ✅ Safe to update journey content without breaking active enrollments
+- ✅ Users complete journeys with consistent messaging
+- ✅ Can track which version performed better for A/B tests
+
+**Example Flow:**
+```
+1. Create journey v1 with 3 stages
+2. User A enrolls (gets v1 snapshot)
+3. Update journey to v2 with different copy
+4. User B enrolls (gets v2 snapshot)
+5. User A completes with v1, User B with v2 - no interference
+```
+
+**Implementation:**
+- Snapshots stored in `enrollments.stages_snapshot` field
+- Scheduler uses snapshot, not journey lookup
+- GET /journeys/:id shows current version
+- PATCH increments version only for stage changes
+- Metadata updates (name, is_active) don't change version
+
+**Journey Management Features:**
+- **Journey Creation**: AI-generated OR manual custom journeys
+  - AI Mode: Provide goal/audience, get AI-generated stages
+  - Manual Mode: Provide name and custom stages array
+- **Journey Updates**: Update journey content with versioning
+  - Metadata updates: name, reply_to, is_active
+  - Full stage replacement or partial stage updates
+  - Version tracking ensures existing enrollments use original stages
+- **Journey Retrieval**: GET endpoint to fetch journey details
+
 ### AI Journey Generation
 
 Flow: HTTP endpoint -> `generateJourneyAction` (action) -> `generateJourneyWithFallback` (`convex/lib/ai.ts`)
@@ -205,10 +248,20 @@ npx tsx testing/test-health-performance.ts     # Performance under load (5 tests
 ## Key Files
 
 - `convex/schema.ts`: Database schema and indexes
+  - Journeys table: Added `version` field for tracking updates
+  - Enrollments table: Added `journey_version` and `stages_snapshot` for isolation
 - `convex/http.ts`: HTTP API endpoints
+  - POST /journeys: AI-generated or manual journey creation
+  - GET /journeys/:id: Retrieve journey details
+  - PATCH /journeys/:id: Update journey with versioning
 - `convex/actions.ts`: External API integration layer
 - `convex/mutations.ts`: Database write operations
+  - `createJourneyFromGenerated`: AI-generated journey creation
+  - `createManualJourney`: Manual journey creation with custom stages
+  - `updateJourney`: Update existing journey with versioning support
+  - `createEnrollment`: Enrollment creation with stage snapshot
 - `convex/queries.ts`: Database read operations
+  - `getJourney`: Retrieve full journey details
 - `convex/lib/httpAuth.ts`: API authentication wrapper
 - `convex/lib/templates.ts`: Handlebars template engine
 - `convex/lib/idempotency.ts`: Idempotency key management

@@ -524,6 +524,7 @@ export const getJourneyById = query({
         body: v.string()
       })),
       is_active: v.boolean(),
+      version: v.optional(v.number()),
       default_reply_to: v.optional(v.string()),
       default_tags: v.optional(v.any()),
       stats: v.object({
@@ -535,7 +536,8 @@ export const getJourneyById = query({
         open_rate: v.number(),
         click_rate: v.number()
       }),
-      created_at: v.number()
+      created_at: v.number(),
+      updated_at: v.optional(v.number())
     }),
     v.null()
   ),
@@ -584,7 +586,19 @@ export const getJourneyById = query({
     const click_rate = delivered > 0 ? clicks / delivered : 0;
 
     return {
-      ...journey,
+      _id: journey._id,
+      _creationTime: journey._creationTime,
+      account_id: journey.account_id,
+      name: journey.name,
+      goal: journey.goal,
+      audience: journey.audience,
+      stages: journey.stages,
+      is_active: journey.is_active,
+      version: journey.version,
+      default_reply_to: journey.default_reply_to,
+      default_tags: journey.default_tags,
+      created_at: journey._creationTime,
+      updated_at: journey.updated_at,
       stats: {
         total_enrolled,
         total_completed,

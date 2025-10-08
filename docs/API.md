@@ -63,9 +63,11 @@ curl -X GET "https://focused-bloodhound-276.convex.site/health" \
 
 **POST /journeys**
 
-Creates a new email journey with AI-generated content.
+Create a new email journey. Supports two modes:
+- **AI Mode**: Provide `goal` and `audience`, AI generates stages
+- **Manual Mode**: Provide `name` and `stages` array with custom content
 
-**Request:**
+**AI Mode Request:**
 ```bash
 curl -X POST "https://focused-bloodhound-276.convex.site/journeys" \
   -H "X-API-Key: YOUR_API_KEY" \
@@ -80,37 +82,233 @@ curl -X POST "https://focused-bloodhound-276.convex.site/journeys" \
   }'
 ```
 
+**Manual Mode Request:**
+```bash
+curl -X POST "https://focused-bloodhound-276.convex.site/journeys" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Product Launch Sequence",
+    "goal": "Launch new feature",
+    "audience": "Existing customers",
+    "stages": [
+      {
+        "day": 0,
+        "subject": "🚀 New Feature Launch",
+        "body": "Hi {{name}},\n\nWe'\''re excited to announce... {{unsubscribe_url}}"
+      },
+      {
+        "day": 3,
+        "subject": "How'\''s it going?",
+        "body": "Hey {{name}},\n\nChecking in... {{unsubscribe_url}}"
+      },
+      {
+        "day": 7,
+        "subject": "One week milestone",
+        "body": "Hi {{name}},\n\nCongrats... {{unsubscribe_url}}"
+      }
+    ],
+    "options": {
+      "default_reply_to": "support@yourcompany.com",
+      "default_tags": {"campaign": "launch_2024"}
+    }
+  }'
+```
+
 **Parameters:**
+
+*AI Mode:*
 - `goal` (required) - The objective of the email journey
 - `audience` (required) - Who the emails are targeting
 - `options.emails` (optional) - Number of emails to generate (default: 5, max: 10)
 - `options.default_reply_to` (optional) - Default Reply-To email address
 
+*Manual Mode:*
+- `name` (required) - Journey name
+- `stages` (required) - Array of stage objects
+  - `day` (required) - Day number (must be >= 0 and in ascending order)
+  - `subject` (required) - Email subject (supports Handlebars)
+  - `body` (required) - Email body HTML (supports Handlebars, must include `{{unsubscribe_url}}`)
+- `goal` (optional) - Journey goal for analytics
+- `audience` (optional) - Target audience for analytics
+- `options.default_reply_to` (optional) - Default Reply-To email address
+- `options.default_tags` (optional) - Default tags for all enrollments
+
 **Response:**
 ```json
 {
   "journey_id": "jd7fg1fa3kq2dncmm05323g1td7rnxse",
-  "name": "Trial → Paid Conversion (B2B SaaS)",
-  "default_reply_to": "support@yourcompany.com",
+  "name": "Product Launch Sequence",
+  "mode": "manual",
   "stages": [
     {
       "day": 0,
-      "subject": "Welcome to {{company}}, {{name}}!",
-      "body": "<p>Hi {{name}},</p><p>Welcome to our platform...</p><p><a href=\"{{unsubscribe_url}}\">Unsubscribe</a></p>"
+      "subject": "🚀 New Feature Launch",
+      "body": "Hi {{name}},\n\nWe're excited to announce... {{unsubscribe_url}}"
     },
     {
-      "day": 2,
-      "subject": "Get started with your first project",
-      "body": "<p>Hi {{name}},</p><p>...</p><p><a href=\"{{unsubscribe_url}}\">Unsubscribe</a></p>"
+      "day": 3,
+      "subject": "How's it going?",
+      "body": "Hey {{name}},\n\nChecking in... {{unsubscribe_url}}"
+    },
+    {
+      "day": 7,
+      "subject": "One week milestone",
+      "body": "Hi {{name}},\n\nCongrats... {{unsubscribe_url}}"
     }
-  ]
+  ],
+  "default_reply_to": "support@yourcompany.com"
 }
 ```
 
+**Errors:**
+- `400` - Invalid stages (empty array, wrong day order, missing unsubscribe_url)
+- `400` - Invalid template syntax
+- `401` - Invalid or missing API key
+
 **Notes:**
-- AI generation uses OpenAI GPT-4
-- Fallback template used if AI fails
-- All email bodies include required `{{unsubscribe_url}}` variable
+- AI mode uses OpenAI GPT-4 with fallback template if AI fails
+- Manual mode gives full control over email content and timing
+- Stage days must be in ascending order (0, 3, 7 not 7, 3, 0)
+- All email bodies must include `{{unsubscribe_url}}` variable
+
+---
+
+### Get Journey
+
+**GET /journeys/:id**
+
+Retrieve full details for a specific journey.
+
+**Request:**
+```bash
+curl -X GET "https://focused-bloodhound-276.convex.site/journeys/jd7fg1fa3kq2dncmm05323g1td7rnxse" \
+  -H "X-API-Key: YOUR_API_KEY"
+```
+
+**Response:**
+```json
+{
+  "journey_id": "jd7fg1fa3kq2dncmm05323g1td7rnxse",
+  "name": "Product Launch Sequence",
+  "version": 2,
+  "goal": "Launch new feature",
+  "audience": "Existing customers",
+  "stages": [
+    {
+      "day": 0,
+      "subject": "🚀 New Feature Launch",
+      "body": "Hi {{name}},\n\nWe're excited..."
+    }
+  ],
+  "is_active": true,
+  "default_reply_to": "support@yourcompany.com",
+  "default_tags": {"campaign": "launch_2024"},
+  "stats": {
+    "total_enrolled": 45,
+    "total_completed": 12,
+    "total_converted": 8,
+    "total_bounced": 1,
+    "total_complained": 0,
+    "open_rate": 0.65,
+    "click_rate": 0.32
+  },
+  "created_at": "2024-01-15T10:30:00Z"
+}
+```
+
+**Errors:**
+- `404` - Journey not found or you don't have access
+- `401` - Invalid or missing API key
+
+---
+
+### Update Journey
+
+**PATCH /journeys/:id**
+
+Update an existing journey. Supports updating metadata, full stage replacement, or partial stage updates.
+
+**Important:** Existing active enrollments continue with their original stages. Only new enrollments will use the updated stages.
+
+**Update Metadata Only (name, reply_to, etc.):**
+```bash
+curl -X PATCH "https://focused-bloodhound-276.convex.site/journeys/jd7fg1fa3kq2dncmm05323g1td7rnxse" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Journey Name",
+    "default_reply_to": "newsupport@yourcompany.com",
+    "is_active": false
+  }'
+```
+
+**Full Stage Replacement:**
+```bash
+curl -X PATCH "https://focused-bloodhound-276.convex.site/journeys/jd7fg1fa3kq2dncmm05323g1td7rnxse" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "stages": [
+      {"day": 0, "subject": "New Day 0", "body": "New content {{unsubscribe_url}}"},
+      {"day": 2, "subject": "New Day 2", "body": "More content {{unsubscribe_url}}"}
+    ]
+  }'
+```
+
+**Partial Stage Updates (by index):**
+```bash
+curl -X PATCH "https://focused-bloodhound-276.convex.site/journeys/jd7fg1fa3kq2dncmm05323g1td7rnxse" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "stage_updates": [
+      {
+        "index": 0,
+        "subject": "Updated Subject for Stage 0"
+      },
+      {
+        "index": 2,
+        "body": "Updated body for stage 2 {{unsubscribe_url}}"
+      }
+    ]
+  }'
+```
+
+**Partial Stage Updates (by day):**
+```bash
+curl -X PATCH "https://focused-bloodhound-276.convex.site/journeys/jd7fg1fa3kq2dncmm05323g1td7rnxse" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "stage_updates": [
+      {
+        "day": 3,
+        "subject": "Updated Subject for Day 3 Email"
+      }
+    ]
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "journey_id": "jd7fg1fa3kq2dncmm05323g1td7rnxse",
+  "version": 3
+}
+```
+
+**Version Behavior:**
+- Metadata updates (name, goal, is_active, reply_to) → version stays same
+- Stage updates (full or partial) → version increments
+
+**Errors:**
+- `400` - Invalid update (both stages and stage_updates provided)
+- `400` - Invalid stage ordering or missing unsubscribe_url
+- `404` - Journey not found
+- `403` - You don't have access to this journey
+- `401` - Invalid or missing API key
 
 ---
 

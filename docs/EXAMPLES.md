@@ -5,13 +5,15 @@ Production-ready code examples for common use cases.
 ## Table of Contents
 
 - [Recipe 1: Trial User Conversion Flow](#recipe-1-trial-user-conversion-flow)
-- [Recipe 2: Onboarding Sequence](#recipe-2-onboarding-sequence)
-- [Recipe 3: Re-engagement Campaign](#recipe-3-re-engagement-campaign)
-- [Recipe 4: Product Launch Announcement](#recipe-4-product-launch-announcement)
-- [Recipe 5: Event-Driven Emails](#recipe-5-event-driven-emails)
-- [Recipe 6: Batch Enrollment](#recipe-6-batch-enrollment)
-- [Recipe 7: Analytics Dashboard](#recipe-7-analytics-dashboard)
-- [Recipe 8: Idempotent Operations](#recipe-8-idempotent-operations)
+- [Recipe 2: Manual Journey Creation with Custom Timing](#recipe-2-manual-journey-creation-with-custom-timing)
+- [Recipe 3: Updating Journey Content](#recipe-3-updating-journey-content)
+- [Recipe 4: Onboarding Sequence](#recipe-4-onboarding-sequence)
+- [Recipe 5: Re-engagement Campaign](#recipe-5-re-engagement-campaign)
+- [Recipe 6: Product Launch Announcement](#recipe-6-product-launch-announcement)
+- [Recipe 7: Event-Driven Emails](#recipe-7-event-driven-emails)
+- [Recipe 8: Batch Enrollment](#recipe-8-batch-enrollment)
+- [Recipe 9: Analytics Dashboard](#recipe-9-analytics-dashboard)
+- [Recipe 10: Idempotent Operations](#recipe-10-idempotent-operations)
 
 ---
 
@@ -185,7 +187,296 @@ def handle_user_upgrade(user):
 
 ---
 
-## Recipe 2: Onboarding Sequence
+## Recipe 2: Manual Journey Creation with Custom Timing
+
+This example shows how to create a journey with precise control over email content and timing.
+
+### Use Case
+You have pre-written email copy for a product launch and want exact control over when each email sends.
+
+### Node.js Example
+```javascript
+const axios = require('axios');
+
+async function createManualJourney() {
+  const response = await axios.post(
+    'https://focused-bloodhound-276.convex.site/journeys',
+    {
+      name: 'Q1 2024 Product Launch',
+      goal: 'Drive adoption of new analytics feature',
+      audience: 'Existing Pro customers',
+      stages: [
+        {
+          day: 0,
+          subject: '🚀 Introducing Advanced Analytics',
+          body: `
+            <html>
+              <body>
+                <h1>Hi {{name}},</h1>
+                <p>We're thrilled to announce our new Advanced Analytics dashboard,
+                built specifically for teams like yours at {{company}}.</p>
+
+                <a href="https://app.example.com/analytics">Try it now</a>
+
+                <p><small><a href="{{unsubscribe_url}}">Unsubscribe</a></small></p>
+              </body>
+            </html>
+          `
+        },
+        {
+          day: 2,
+          subject: 'Quick tips for getting started',
+          body: `
+            <html>
+              <body>
+                <h1>Hey {{name}},</h1>
+                <p>Here are 3 quick ways to get the most from Advanced Analytics...</p>
+                <p><small><a href="{{unsubscribe_url}}">Unsubscribe</a></small></p>
+              </body>
+            </html>
+          `
+        },
+        {
+          day: 7,
+          subject: 'Your first week with Analytics',
+          body: `
+            <html>
+              <body>
+                <h1>Hi {{name}},</h1>
+                <p>It's been a week since we launched Advanced Analytics.
+                Here's what other teams at companies like {{company}} are discovering...</p>
+                <p><small><a href="{{unsubscribe_url}}">Unsubscribe</a></small></p>
+              </body>
+            </html>
+          `
+        },
+        {
+          day: 14,
+          subject: 'Need help? We're here',
+          body: `
+            <html>
+              <body>
+                <h1>Hey {{name}},</h1>
+                <p>Have questions about Analytics? Our team is here to help.</p>
+                <p>Reply to this email or book a call.</p>
+                <p><small><a href="{{unsubscribe_url}}">Unsubscribe</a></small></p>
+              </body>
+            </html>
+          `
+        }
+      ],
+      options: {
+        default_reply_to: 'product@example.com',
+        default_tags: {
+          campaign: 'analytics_launch_q1',
+          team: 'product'
+        }
+      }
+    },
+    {
+      headers: {
+        'X-API-Key': 'your-api-key',
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+
+  console.log('Journey created:', response.data.journey_id);
+  return response.data;
+}
+
+createManualJourney();
+```
+
+### Python Example
+```python
+import requests
+
+def create_manual_journey():
+    response = requests.post(
+        'https://focused-bloodhound-276.convex.site/journeys',
+        headers={
+            'X-API-Key': 'your-api-key',
+            'Content-Type': 'application/json'
+        },
+        json={
+            'name': 'Q1 2024 Product Launch',
+            'stages': [
+                {
+                    'day': 0,
+                    'subject': '🚀 Introducing Advanced Analytics',
+                    'body': f'''
+                        <html>
+                          <body>
+                            <h1>Hi {{{{name}}}},</h1>
+                            <p>We're thrilled to announce...</p>
+                            <p><small><a href="{{{{unsubscribe_url}}}}">Unsubscribe</a></small></p>
+                          </body>
+                        </html>
+                    '''
+                },
+                {
+                    'day': 2,
+                    'subject': 'Quick tips for getting started',
+                    'body': '...'
+                }
+            ],
+            'options': {
+                'default_reply_to': 'product@example.com'
+            }
+        }
+    )
+
+    print(f"Journey created: {response.json()['journey_id']}")
+    return response.json()
+
+create_manual_journey()
+```
+
+### Key Points
+- ✅ Full control over email copy and timing
+- ✅ Days must be in ascending order (0, 2, 7, 14)
+- ✅ Each body must include `{{unsubscribe_url}}`
+- ✅ Supports Handlebars variables: `{{name}}`, `{{company}}`, etc.
+
+---
+
+## Recipe 3: Updating Journey Content
+
+This example shows how to update journey stages after creation.
+
+### Scenario 1: Fix a Typo in One Email
+
+**Node.js:**
+```javascript
+async function fixTypoInStage(journeyId) {
+  // Get current journey to see what needs fixing
+  const journey = await axios.get(
+    `https://focused-bloodhound-276.convex.site/journeys/${journeyId}`,
+    { headers: { 'X-API-Key': 'your-api-key' } }
+  );
+
+  console.log('Current stage 2:', journey.data.stages[2]);
+
+  // Update just the stage with the typo (stage index 2)
+  const response = await axios.patch(
+    `https://focused-bloodhound-276.convex.site/journeys/${journeyId}`,
+    {
+      stage_updates: [
+        {
+          index: 2,
+          subject: 'Corrected Subject Line Here'
+        }
+      ]
+    },
+    { headers: { 'X-API-Key': 'your-api-key' } }
+  );
+
+  console.log('Updated to version:', response.data.version);
+}
+```
+
+### Scenario 2: A/B Test New Email Copy
+
+**Node.js:**
+```javascript
+async function createABTest() {
+  // Create original journey (control)
+  const controlJourney = await axios.post(
+    'https://focused-bloodhound-276.convex.site/journeys',
+    {
+      name: 'Welcome Series - Control',
+      stages: [
+        { day: 0, subject: 'Welcome!', body: 'Original copy {{unsubscribe_url}}' }
+      ]
+    },
+    { headers: { 'X-API-Key': 'your-api-key' } }
+  );
+
+  // Create variant journey (test)
+  const testJourney = await axios.post(
+    'https://focused-bloodhound-276.convex.site/journeys',
+    {
+      name: 'Welcome Series - Test',
+      stages: [
+        { day: 0, subject: 'Welcome aboard! 🎉', body: 'New copy {{unsubscribe_url}}' }
+      ]
+    },
+    { headers: { 'X-API-Key': 'your-api-key' } }
+  );
+
+  // Enroll 50% to each
+  for (const user of users) {
+    const journeyId = Math.random() < 0.5
+      ? controlJourney.data.journey_id
+      : testJourney.data.journey_id;
+
+    await enrollUser(journeyId, user);
+  }
+}
+```
+
+### Scenario 3: Pause Journey for Maintenance
+
+**Node.js:**
+```javascript
+async function pauseAndResumeJourney(journeyId) {
+  // Pause journey (stops new enrollments)
+  await axios.patch(
+    `https://focused-bloodhound-276.convex.site/journeys/${journeyId}`,
+    { is_active: false },
+    { headers: { 'X-API-Key': 'your-api-key' } }
+  );
+
+  console.log('Journey paused. Existing enrollments continue, new enrollments blocked.');
+
+  // Do maintenance work...
+
+  // Resume journey
+  await axios.patch(
+    `https://focused-bloodhound-276.convex.site/journeys/${journeyId}`,
+    { is_active: true },
+    { headers: { 'X-API-Key': 'your-api-key' } }
+  );
+
+  console.log('Journey resumed.');
+}
+```
+
+### Scenario 4: Replace Entire Email Sequence
+
+**Node.js:**
+```javascript
+async function replaceEntireSequence(journeyId) {
+  // Replace all stages with new content
+  const response = await axios.patch(
+    `https://focused-bloodhound-276.convex.site/journeys/${journeyId}`,
+    {
+      name: 'Welcome Series v2',
+      stages: [
+        { day: 0, subject: 'Welcome!', body: 'New v2 content {{unsubscribe_url}}' },
+        { day: 1, subject: 'Day 1', body: 'Faster followup {{unsubscribe_url}}' },
+        { day: 3, subject: 'Day 3', body: 'Check in {{unsubscribe_url}}' }
+      ]
+    },
+    { headers: { 'X-API-Key': 'your-api-key' } }
+  );
+
+  console.log('Journey updated to version:', response.data.version);
+  console.log('⚠️  Note: Existing enrollments continue with original stages');
+  console.log('New enrollments will use v2 stages');
+}
+```
+
+### Key Points
+- ✅ **Existing enrollments are not affected** - they continue with original stages
+- ✅ Version increments only when stages change
+- ✅ Metadata updates (name, is_active) don't change version
+- ✅ Use `stage_updates` for partial changes, `stages` for full replacement
+
+---
+
+## Recipe 4: Onboarding Sequence
 
 **Use Case:** Welcome new users with a 5-email onboarding sequence teaching them how to use your product.
 
@@ -303,7 +594,7 @@ app.post('/api/features/:name/used', async (req, res) => {
 
 ---
 
-## Recipe 3: Re-engagement Campaign
+## Recipe 5: Re-engagement Campaign
 
 **Use Case:** Send emails to inactive users who haven't logged in for 30 days.
 
@@ -438,7 +729,7 @@ def login():
 
 ---
 
-## Recipe 4: Product Launch Announcement
+## Recipe 6: Product Launch Announcement
 
 **Use Case:** Announce a new product feature to your entire user base.
 
@@ -512,7 +803,7 @@ echo "Launch campaign complete!"
 
 ---
 
-## Recipe 5: Event-Driven Emails
+## Recipe 7: Event-Driven Emails
 
 **Use Case:** Send targeted emails based on user actions (demo requested, feature used, etc.).
 
@@ -632,7 +923,7 @@ app.listen(3000, () => console.log('Event API running on port 3000'));
 
 ---
 
-## Recipe 6: Batch Enrollment
+## Recipe 8: Batch Enrollment
 
 **Use Case:** Enroll 1000+ users efficiently with proper error handling and rate limiting.
 
@@ -759,7 +1050,7 @@ asyncio.run(main())
 
 ---
 
-## Recipe 7: Analytics Dashboard
+## Recipe 9: Analytics Dashboard
 
 **Use Case:** Build a real-time dashboard showing journey performance.
 
@@ -907,7 +1198,7 @@ export default JourneyDashboard;
 
 ---
 
-## Recipe 8: Idempotent Operations
+## Recipe 10: Idempotent Operations
 
 **Use Case:** Safely retry failed enrollments without creating duplicates.
 
