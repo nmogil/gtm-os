@@ -191,23 +191,36 @@ http.route({
       );
     }
 
-    // Validate Resend key before enrollment
+    // Check Resend API key validity (Issue #29: avoid rate limits)
     const overrideKey = request.headers.get("X-Resend-Key");
-    const validation = await ctx.runAction(internal.actions.validateResendKeyAction, {
-      resend_api_key_encrypted: account.resend_api_key_encrypted,
-      override_key: overrideKey || undefined
-    });
 
-    if (!validation.valid) {
+    if (overrideKey) {
+      // If override key provided, validate it
+      const validation = await ctx.runAction(internal.actions.validateResendKeyAction, {
+        resend_api_key_encrypted: undefined,
+        override_key: overrideKey
+      });
+
+      if (!validation.valid) {
+        return errorResponse(
+          "invalid_resend_key",
+          validation.error || "Invalid X-Resend-Key header",
+          {},
+          401
+        );
+      }
+    } else if (!account.resend_key_valid && account.plan !== "test") {
+      // No override key and account key is invalid or not configured
       return errorResponse(
         "invalid_resend_key",
-        validation.error || "Invalid Resend API key",
+        "Resend API key not configured or invalid. Please update your account settings.",
         {
-          hint: "Set a valid Resend API key in your account settings or provide X-Resend-Key header"
+          hint: "Use PATCH /accounts/:id/settings to set a valid Resend API key"
         },
         401
       );
     }
+    // If test account or key is valid (or undefined for backward compatibility), proceed
 
     let result;
     try {
@@ -406,6 +419,89 @@ http.route({
         status: 200,
         headers: { "Content-Type": "application/json" }
       }
+    );
+  })
+});
+
+// Account settings endpoint (Issue #29)
+http.route({
+  pathPrefix: "/accounts/",
+  method: "PATCH",
+  handler: authenticatedAction(async (ctx, request, account) => {
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split("/").filter(p => p);
+
+    // Handle PATCH /accounts/:id/settings
+    if (pathParts.length !== 3 || pathParts[2] !== "settings") {
+      return new Response("Not Found", { status: 404 });
+    }
+
+    const accountId = pathParts[1];
+
+    // Verify the accountId matches authenticated account
+    if (account._id !== accountId) {
+      return errorResponse(
+        "unauthorized",
+        "Cannot modify another account's settings",
+        {},
+        403
+      );
+    }
+
+    const body = await request.json();
+
+    // Validate Resend API key if provided
+    if (body.resend_api_key) {
+      try {
+        // Encrypt the new key
+        const encrypted = await ctx.runAction(internal.actions.encryptDataAction, {
+          data: body.resend_api_key
+        });
+
+        // Validate the key
+        const validation = await ctx.runAction(internal.actions.validateResendKeyAction, {
+          resend_api_key_encrypted: undefined,
+          override_key: body.resend_api_key
+        });
+
+        if (!validation.valid) {
+          return errorResponse(
+            "invalid_resend_key",
+            validation.error || "Invalid Resend API key",
+            {},
+            400
+          );
+        }
+
+        // Update account with validated key
+        await ctx.runMutation(api.mutations.updateAccountResendKey, {
+          account_id: account._id,
+          resend_api_key_encrypted: encrypted,
+          is_valid: true
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: "Resend API key updated and validated"
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      } catch (error: any) {
+        return errorResponse(
+          "resend_validation_failed",
+          error.message || "Failed to validate Resend API key",
+          {},
+          500
+        );
+      }
+    }
+
+    return errorResponse(
+      "invalid_request",
+      "No settings to update",
+      {},
+      400
     );
   })
 });

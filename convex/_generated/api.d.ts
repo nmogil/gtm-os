@@ -30,6 +30,8 @@ import type * as lib_templates from "../lib/templates.js";
 import type * as lib_utils from "../lib/utils.js";
 import type * as lib_validation from "../lib/validation.js";
 import type * as metrics from "../metrics.js";
+import type * as migrations_001_add_resend_key_valid from "../migrations/001_add_resend_key_valid.js";
+import type * as migrations_002_fix_missing_stages_snapshot from "../migrations/002_fix_missing_stages_snapshot.js";
 import type * as mutations from "../mutations.js";
 import type * as queries from "../queries.js";
 import type * as scheduler from "../scheduler.js";
@@ -63,6 +65,8 @@ declare const fullApi: ApiFromModules<{
   "lib/utils": typeof lib_utils;
   "lib/validation": typeof lib_validation;
   metrics: typeof metrics;
+  "migrations/001_add_resend_key_valid": typeof migrations_001_add_resend_key_valid;
+  "migrations/002_fix_missing_stages_snapshot": typeof migrations_002_fix_missing_stages_snapshot;
   mutations: typeof mutations;
   queries: typeof queries;
   scheduler: typeof scheduler;

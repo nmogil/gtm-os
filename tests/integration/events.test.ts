@@ -8,14 +8,19 @@ describe("POST /events", () => {
 
   beforeAll(async () => {
     // Create journey and enrollment for testing events
-    const { data: journeyData } = await apiRequest("/journeys", {
+    const { response: journeyResponse, data: journeyData } = await apiRequest("/journeys", {
       method: "POST",
       body: JSON.stringify(mockJourneyPayload)
     });
+
+    if (journeyResponse.status !== 200 || !journeyData.journey_id) {
+      throw new Error(`Failed to create journey in beforeAll: ${journeyResponse.status} - ${JSON.stringify(journeyData)}`);
+    }
+
     journeyId = journeyData.journey_id;
 
     testEmail = generateTestEmail();
-    await apiRequest("/enrollments", {
+    const { response: enrollResponse, data: enrollData } = await apiRequest("/enrollments", {
       method: "POST",
       body: JSON.stringify({
         journey_id: journeyId,
@@ -25,6 +30,10 @@ describe("POST /events", () => {
         }
       })
     });
+
+    if (enrollResponse.status !== 200 || !enrollData.enrollment_id) {
+      throw new Error(`Failed to create enrollment in beforeAll: ${enrollResponse.status} - ${JSON.stringify(enrollData)}`);
+    }
   });
 
   it("tracks conversion event", async () => {

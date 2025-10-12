@@ -7,10 +7,15 @@ describe("POST /enrollments", () => {
 
   beforeAll(async () => {
     // Create a journey for testing enrollments
-    const { data } = await apiRequest("/journeys", {
+    const { response, data } = await apiRequest("/journeys", {
       method: "POST",
       body: JSON.stringify(mockJourneyPayload)
     });
+
+    if (response.status !== 200 || !data.journey_id) {
+      throw new Error(`Failed to create journey in beforeAll: ${response.status} - ${JSON.stringify(data)}`);
+    }
+
     journeyId = data.journey_id;
   });
 

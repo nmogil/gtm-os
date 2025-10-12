@@ -6,6 +6,7 @@ export default defineSchema({
     name: v.string(),
     api_key: v.string(),
     resend_api_key_encrypted: v.optional(v.string()),
+    resend_key_valid: v.optional(v.boolean()),
     plan: v.string(),
     limits: v.object({
       max_journeys: v.number(),

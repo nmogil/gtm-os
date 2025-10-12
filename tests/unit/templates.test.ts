@@ -75,7 +75,7 @@ describe("Template Rendering", () => {
     );
     expect(result).toContain("Test User");
     expect(result).toContain("Test Co");
-    expect(result).toContain("https://example.com/u/123");
+    expect(result).toContain("https://testing.xyz/u/123");
   });
 
   it("handles templates with numbers", () => {

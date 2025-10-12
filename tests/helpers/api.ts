@@ -22,7 +22,7 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
 }
 
 export function generateTestEmail(): string {
-  return `test-${Date.now()}-${Math.random().toString(36).substring(7)}@test.com`;
+  return `test-${Date.now()}-${Math.random().toString(36).substring(7)}@testing.xyz`;
 }
 
 export function generateIdempotencyKey(): string {

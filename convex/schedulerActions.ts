@@ -102,83 +102,93 @@ export const processBatchAction = internalAction({
     const now = Date.now();
 
     for (const enrollment of enrollments) {
-      // Check if converted (stop-on-convert)
-      const converted: boolean = await ctx.runQuery(internal.scheduler.checkConverted, {
-        enrollmentId: enrollment._id
-      });
+      try {
+        // CRITICAL FIX: Check if stages_snapshot exists (old enrollments may not have it)
+        if (!enrollment.stages_snapshot || !Array.isArray(enrollment.stages_snapshot)) {
+          console.error("Enrollment missing stages_snapshot:", enrollment._id, "- marking as failed");
+          await ctx.runMutation(internal.scheduler.markEnrollmentFailed, {
+            enrollmentId: enrollment._id,
+            error: "missing_stages_snapshot"
+          });
+          continue;
+        }
 
-      if (converted) {
-        await ctx.runMutation(internal.scheduler.markEnrollmentCompleted, {
-          enrollmentId: enrollment._id,
-          reason: "converted"
-        });
-        continue;
-      }
-
-      // Check suppression
-      const suppressed: boolean = await ctx.runQuery(internal.scheduler.checkSuppressed, {
-        contactEmail: enrollment.contact_email,
-        journeyId: enrollment.journey_id
-      });
-
-      if (suppressed) {
-        await ctx.runMutation(internal.scheduler.markEnrollmentSuppressed, {
+        // Check if converted (stop-on-convert)
+        const converted: boolean = await ctx.runQuery(internal.scheduler.checkConverted, {
           enrollmentId: enrollment._id
         });
-        continue;
-      }
 
-      // Get journey
-      const journey = await ctx.runQuery(internal.scheduler.loadJourney, {
-        journeyId: enrollment.journey_id
-      });
+        if (converted) {
+          await ctx.runMutation(internal.scheduler.markEnrollmentCompleted, {
+            enrollmentId: enrollment._id,
+            reason: "converted"
+          });
+          continue;
+        }
 
-      if (!journey) {
-        console.error("Journey not found:", enrollment.journey_id);
-        continue;
-      }
-
-      // Check if stage exists
-      if (enrollment.current_stage >= enrollment.stages_snapshot.length) {
-        await ctx.runMutation(internal.scheduler.markEnrollmentCompleted, {
-          enrollmentId: enrollment._id,
-          reason: "all_stages_complete"
+        // Check suppression
+        const suppressed: boolean = await ctx.runQuery(internal.scheduler.checkSuppressed, {
+          contactEmail: enrollment.contact_email,
+          journeyId: enrollment.journey_id
         });
-        continue;
-      }
 
-      const stage = enrollment.stages_snapshot[enrollment.current_stage];
+        if (suppressed) {
+          await ctx.runMutation(internal.scheduler.markEnrollmentSuppressed, {
+            enrollmentId: enrollment._id
+          });
+          continue;
+        }
 
-      // Check send window (PRD Section 5.2) - skip if test_mode is true
-      if (!enrollment.test_mode && !isWithinSendWindow(now)) {
-        await ctx.runMutation(internal.scheduler.rescheduleEnrollment, {
-          enrollmentId: enrollment._id,
-          nextRunAt: getNext9AM()
+        // Get journey
+        const journey = await ctx.runQuery(internal.scheduler.loadJourney, {
+          journeyId: enrollment.journey_id
         });
-        continue;
-      }
 
-      // Check for existing message (idempotency)
-      const messageExists: boolean = await ctx.runQuery(internal.scheduler.checkMessageExists, {
-        enrollmentId: enrollment._id,
-        stage: enrollment.current_stage
-      });
+        if (!journey) {
+          console.error("Journey not found:", enrollment.journey_id);
+          continue;
+        }
 
-      if (messageExists) {
-        console.log("Message already exists for enrollment:", enrollment._id, "stage:", enrollment.current_stage);
-        continue;
-      }
+        // Check if stage exists
+        if (enrollment.current_stage >= enrollment.stages_snapshot.length) {
+          await ctx.runMutation(internal.scheduler.markEnrollmentCompleted, {
+            enrollmentId: enrollment._id,
+            reason: "all_stages_complete"
+          });
+          continue;
+        }
 
-      // Render templates
-      const templateContext: TemplateContext = {
-        ...enrollment.contact_data,
-        email: enrollment.contact_email,
-        unsubscribe_url: generateUnsubscribeUrl(enrollment._id),
-        enrollment_id: enrollment._id,
-        journey_name: journey.name
-      };
+        const stage = enrollment.stages_snapshot[enrollment.current_stage];
 
-      try {
+        // Check send window (PRD Section 5.2) - skip if test_mode is true
+        if (!enrollment.test_mode && !isWithinSendWindow(now)) {
+          await ctx.runMutation(internal.scheduler.rescheduleEnrollment, {
+            enrollmentId: enrollment._id,
+            nextRunAt: getNext9AM()
+          });
+          continue;
+        }
+
+        // Check for existing message (idempotency)
+        const messageExists: boolean = await ctx.runQuery(internal.scheduler.checkMessageExists, {
+          enrollmentId: enrollment._id,
+          stage: enrollment.current_stage
+        });
+
+        if (messageExists) {
+          console.log("Message already exists for enrollment:", enrollment._id, "stage:", enrollment.current_stage);
+          continue;
+        }
+
+        // Render templates
+        const templateContext: TemplateContext = {
+          ...enrollment.contact_data,
+          email: enrollment.contact_email,
+          unsubscribe_url: generateUnsubscribeUrl(enrollment._id),
+          enrollment_id: enrollment._id,
+          journey_name: journey.name
+        };
+
         const renderedSubject = renderTemplate(stage.subject, templateContext);
         const renderedBody = renderTemplate(stage.body, templateContext);
 
@@ -217,11 +227,12 @@ export const processBatchAction = internalAction({
         });
 
       } catch (error: any) {
-        console.error("Template render failed:", error);
+        console.error("Error processing enrollment:", enrollment._id, error);
         await ctx.runMutation(internal.scheduler.markEnrollmentFailed, {
           enrollmentId: enrollment._id,
-          error: "template_render_failed: " + error.message
+          error: "processing_error: " + error.message
         });
+        continue;
       }
     }
 

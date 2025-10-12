@@ -18,6 +18,28 @@ npm run test:ui
 npm run test:coverage
 ```
 
+## First Time Setup
+
+Before running tests for the first time:
+
+```bash
+# 1. Ensure Convex is deployed and running
+npm run dev
+
+# 2. Setup test account (creates account in Convex DB)
+npm run test:setup
+
+# 3. Run tests
+npm test
+```
+
+The test account is created with:
+- API Key: `test-api-key-123`
+- Plan: `test` (unlimited limits)
+- Automatically reused on subsequent test runs
+
+**Note:** The globalSetup in vitest.config.ts will automatically create the test account if it doesn't exist when running tests, but running `npm run test:setup` manually first is recommended for clarity.
+
 ## Test Organization
 
 ### Unit Tests (`tests/unit/`)
@@ -70,15 +92,28 @@ Located in `tests/helpers/`:
 
 ## Environment Configuration
 
-Integration and chaos tests require a running Convex deployment:
+Integration and chaos tests require:
 
-```bash
-# Set custom Convex site URL (default: production site)
-export CONVEX_SITE_URL="https://your-deployment.convex.site"
+1. **Running Convex deployment:**
+   ```bash
+   npm run dev  # In separate terminal
+   ```
 
-# Set custom API key (default: test-api-key-123)
-export TEST_API_KEY="your-test-api-key"
-```
+2. **Test account setup (automatic):**
+   ```bash
+   # Runs automatically via globalSetup when tests start
+   # Or run manually:
+   npm run test:setup
+   ```
+
+3. **Custom environment variables (optional):**
+   ```bash
+   # Set custom Convex site URL (default: production site)
+   export CONVEX_SITE_URL="https://your-deployment.convex.site"
+
+   # Set custom API key (default: test-api-key-123)
+   export TEST_API_KEY="your-test-api-key"
+   ```
 
 ## Coverage
 

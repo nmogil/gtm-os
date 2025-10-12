@@ -1,10 +1,10 @@
 import { TemplateContext } from "../../convex/lib/templates";
 
 export const mockTemplateContext: TemplateContext = {
-  email: "test@example.com",
+  email: "test@testing.xyz",
   name: "Test User",
   company: "Test Co",
-  unsubscribe_url: "https://example.com/u/123",
+  unsubscribe_url: "https://testing.xyz/u/123",
   enrollment_id: "enr_123",
   journey_name: "Test Journey"
 };
@@ -18,7 +18,7 @@ export const mockJourneyPayload = {
 export const mockEnrollmentPayload = (journeyId: string, email?: string) => ({
   journey_id: journeyId,
   contact: {
-    email: email || "test@example.com",
+    email: email || "test@testing.xyz",
     data: {
       name: "Test User",
       company: "Test Company"

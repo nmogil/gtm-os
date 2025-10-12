@@ -953,3 +953,69 @@ async function handleUnsubscribeMutation(
     });
   }
 }
+
+/**
+ * Create or update test account (internal, for testing only)
+ * Used by integration tests to ensure test account exists
+ */
+export const upsertTestAccount = mutation({
+  args: {
+    api_key: v.string(),
+    name: v.string()
+  },
+  returns: v.object({
+    account_id: v.id("accounts"),
+    created: v.boolean()
+  }),
+  handler: async (ctx, args) => {
+    // Check if account exists
+    const existing = await ctx.db
+      .query("accounts")
+      .filter((q) => q.eq(q.field("api_key"), args.api_key))
+      .first();
+
+    if (existing) {
+      return { account_id: existing._id, created: false };
+    }
+
+    // Create new test account
+    const accountId = await ctx.db.insert("accounts", {
+      name: args.name,
+      api_key: args.api_key,
+      plan: "test",
+      resend_key_valid: true,
+      limits: {
+        max_journeys: 1000,
+        max_active_enrollments: 10000,
+        max_enrollments_per_second: 100
+      },
+      usage: {
+        journeys_created: 0,
+        active_enrollments: 0,
+        messages_sent_today: 0
+      },
+      created_at: Date.now()
+    });
+
+    return { account_id: accountId, created: true };
+  }
+});
+
+/**
+ * Update account's Resend API key and validation status
+ * Issue #29: Store validation result to avoid rate limits
+ */
+export const updateAccountResendKey = mutation({
+  args: {
+    account_id: v.id("accounts"),
+    resend_api_key_encrypted: v.string(),
+    is_valid: v.boolean()
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.account_id, {
+      resend_api_key_encrypted: args.resend_api_key_encrypted,
+      resend_key_valid: args.is_valid
+    });
+  }
+});

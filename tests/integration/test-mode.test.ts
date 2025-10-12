@@ -7,10 +7,15 @@ describe("Test Mode", () => {
 
   beforeAll(async () => {
     // Create a journey for testing
-    const { data } = await apiRequest("/journeys", {
+    const { response, data } = await apiRequest("/journeys", {
       method: "POST",
       body: JSON.stringify(mockJourneyPayload)
     });
+
+    if (response.status !== 200 || !data.journey_id) {
+      throw new Error(`Failed to create journey in beforeAll: ${response.status} - ${JSON.stringify(data)}`);
+    }
+
     journeyId = data.journey_id;
   });
 
@@ -72,6 +77,10 @@ describe("Test Mode", () => {
         }
       })
     });
+
+    if (response.status !== 200) {
+      console.log("Error response:", response.status, JSON.stringify(data));
+    }
 
     expect(response.status).toBe(200);
     expect(data.enrollment_id).toBeDefined();

@@ -73,6 +73,18 @@ export const updateResendApiKey = action({
   }
 });
 
+/**
+ * Internal action to encrypt data
+ * Issue #29: Used by HTTP endpoint to encrypt Resend API keys
+ */
+export const encryptDataAction = internalAction({
+  args: { data: v.string() },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    return encrypt(args.data);
+  }
+});
+
 export const generateJourneyAction = action({
   args: {
     goal: v.string(),
