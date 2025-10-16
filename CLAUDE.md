@@ -67,11 +67,12 @@ npx tsx testing/*    # Run test scripts
 ## Environment Variables
 
 ```bash
-CONVEX_DEPLOYMENT=    # Auto-generated
-OPENAI_API_KEY=       # AI generation
-RESEND_API_KEY=       # System default
-SVIX_WEBHOOK_SECRET=  # Webhook verification
-ENCRYPTION_KEY=       # Auto-generated if missing
+CONVEX_DEPLOYMENT=          # Auto-generated
+OPENAI_API_KEY=             # AI generation
+RESEND_API_KEY=             # System default
+SVIX_WEBHOOK_SECRET=        # Webhook verification
+ENCRYPTION_KEY=             # Auto-generated if missing
+SCHEDULER_BATCH_SIZE=100    # Enrollments per cron run (default: 100, range: 1-1000)
 ```
 
 ## Testing

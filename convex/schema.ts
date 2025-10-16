@@ -82,6 +82,7 @@ export default defineSchema({
     .index("by_journey", ["journey_id"])
     .index("by_status", ["status"])
     .index("by_next_run_at", ["next_run_at"])
+    .index("by_status_and_next_run_at", ["status", "next_run_at"])
     .index("by_account_journey_email", ["account_id", "journey_id", "contact_email"]),
 
   messages: defineTable({

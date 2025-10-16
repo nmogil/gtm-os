@@ -4,6 +4,24 @@ import { internal } from "./_generated/api";
 import { checkMessageExists as checkMessageExistsHelper } from "./lib/messageIdempotency";
 import { Id } from "./_generated/dataModel";
 
+// Configuration helper with validation
+function getSchedulerBatchSize(): number {
+  const envValue = process.env.SCHEDULER_BATCH_SIZE;
+
+  if (!envValue) {
+    return 100; // Default
+  }
+
+  const parsed = parseInt(envValue, 10);
+
+  if (isNaN(parsed) || parsed < 1 || parsed > 1000) {
+    console.warn(`Invalid SCHEDULER_BATCH_SIZE: ${envValue}. Using default: 100`);
+    return 100;
+  }
+
+  return parsed;
+}
+
 interface EnrollmentDoc {
   _id: Id<"enrollments">;
   account_id: Id<"accounts">;
@@ -76,18 +94,30 @@ export const processPendingSends = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const now = Date.now();
+    const batchSize = getSchedulerBatchSize();
 
-    // Get pending enrollments (up to 1000 at a time)
+    // Early return: Check if there are any pending sends before loading documents
+    const hasPending = await ctx.db
+      .query("enrollments")
+      .withIndex("by_status_and_next_run_at", (q) =>
+        q.eq("status", "active").lte("next_run_at", now)
+      )
+      .first();
+
+    if (!hasPending) {
+      // No pending sends, skip processing to save bandwidth
+      return null;
+    }
+
+    // Get pending enrollments with configurable batch size
     const pending = await ctx.db
       .query("enrollments")
-      .withIndex("by_next_run_at")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("status"), "active"),
-          q.lte(q.field("next_run_at"), now)
-        )
+      .withIndex("by_status_and_next_run_at", (q) =>
+        q.eq("status", "active").lte("next_run_at", now)
       )
-      .take(1000);
+      .take(batchSize);
+
+    console.log(`Processing ${pending.length} enrollments (batch size: ${batchSize})`);
 
     // Group by account for batch processing
     const batches = groupByAccount(pending);
